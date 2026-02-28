@@ -7,7 +7,6 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://github.com/albertM-hub)
 
 ---
-![Ham Radio Logbook Station Master ON5AM](https://raw.githubusercontent.com/albertM-hub/StationMaster/main/vignette_station_master.png)
 ## 🇫🇷 Français
 
 ### Description

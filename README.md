@@ -9,7 +9,7 @@
 ---
 # 🎙️ ON5AM Station Master V21.0
 
-![Station Master V21.0](https://raw.githubusercontent.com/albertM-hub/StationMaster/main/vignette_station_master.png)
+![Station Master V21.0](vignette_station_master.png)
 ## 🇫🇷 Français
 
 ### Description

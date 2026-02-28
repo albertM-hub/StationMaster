@@ -1,0 +1,39 @@
+# Station Master — .gitignore
+
+# Données personnelles — NE PAS publier
+config.ini
+mon_logbook.db
+*.db
+*.db-shm
+*.db-wal
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Backups locaux
+Backups/
+*.bak
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Python venv
+venv/
+env/
+.env/

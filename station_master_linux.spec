@@ -21,6 +21,12 @@ a = Analysis(
         'smtplib', 'ssl', 'email', 'email.mime.multipart',
         'email.mime.text', 'email.mime.application',
         'tkintermapview',
+        'matplotlib', 'matplotlib.backends.backend_tkagg', 'matplotlib.figure',
+        'numpy',
+        'reportlab', 'reportlab.pdfgen', 'reportlab.pdfgen.canvas',
+        'reportlab.lib', 'reportlab.lib.pagesizes', 'reportlab.lib.styles',
+        'reportlab.lib.units', 'reportlab.lib.colors', 'reportlab.platypus',
+        'reportlab.lib.enums',
         'flex_client', 'spe_expert', 'contest_tab',
         'tab_dxcc', 'tab_dxpeditions', 'tab_dx_unified', 'tab_ft8_monitor',
         'tab_grayline', 'tab_qsl', 'tab_qsl_email', 'tab_spe_expert',
@@ -31,7 +37,6 @@ a = Analysis(
     excludes=[
         'doctest', 'pdb', 'profile',
         'tkinter.test', 'winsound', 'win10toast',
-        'matplotlib', 'numpy', 'reportlab',
     ],
     noarchive=False,
 )
@@ -48,7 +53,6 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon='logo/station_masters.png',
 )
 
 coll = COLLECT(

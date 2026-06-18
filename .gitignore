@@ -1,0 +1,55 @@
+# Station Master — .gitignore
+
+# Données personnelles — NE PAS publier
+config.ini
+mon_logbook.db
+*.db
+*.db-shm
+*.db-wal
+
+# Données téléchargées automatiquement au runtime
+cty.dat
+world_map_grayline.jpg
+
+# PyInstaller
+build/
+build_linux/
+dist/
+dist_linux/
+*.spec.bak
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Anciens .spec dupliqués (un seul .spec officiel : station_master_linux.spec)
+StationMaster.spec
+StationMaster_ON5AM.spec
+StationMaster_linux.spec
+
+# Backups locaux
+Backups/
+*.bak
+
+# Logs
+*.log
+
+# Docs internes de travail (notes superpowers, non destinées au repo public)
+docs/superpowers/
+session_memo.md
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Python venv
+venv/
+env/
+.env/

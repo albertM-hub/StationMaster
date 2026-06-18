@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Station Master
+Comment=Logbook radio amateur pour ON5AM
+Comment[en]=Ham radio logbook
+Exec=/home/albert/Applications/station_master/station_master
+Icon=/home/albert/Applications/station_master/logo/station_masters.png
+Terminal=false
+Categories=Utility;HamRadio;
+StartupNotify=true

@@ -1,0 +1,53 @@
+[USER]
+callsign = YOURCALL
+grid = JO20AA
+
+[CAT]
+port = /dev/ttyUSB0
+baud = 38400
+
+[API]
+qrz_user =
+qrz_pass =
+qrz_key =
+qrz_log_key =
+eqsl_user =
+eqsl_pass =
+club_email =
+club_pass =
+club_call = YOURCALL
+club_key =
+
+[CLUSTER]
+host = on0dxk.dyndns.org
+port = 8000
+call = YOURCALL
+
+[DXCC]
+alert_bands = 20m,15m,10m
+alert_countries =
+
+[LOTW]
+callsign = YOURCALL
+tqsl_path = /usr/bin/tqsl
+user =
+pass =
+
+[BACKUP]
+dir = /home/youruser/Backups
+
+[EMAIL]
+smtp_user =
+smtp_password =
+smtp_host = smtp.gmail.com
+smtp_port = 587
+
+[UDP]
+source = les_deux
+wsjtxport = 2237
+multicastip = 224.0.0.1
+gridtrackerport = 2333
+
+[SPE]
+port = /dev/spe_expert
+baudrate = 115200

@@ -1279,6 +1279,10 @@ class StationMasterApp:
         t_prop = tk.Frame(self.nb, bg=BG); self.nb.add(t_prop, text="🌐 Propagation")
         self._build_propagation_tab(t_prop)
 
+        # --- Onglet Logbook Analysis ---
+        t_loganalysis = tk.Frame(self.nb, bg=BG); self.nb.add(t_loganalysis, text="📊 Logbook Analysis")
+        self._build_logbook_analysis_tab(t_loganalysis)
+
         # --- Initialisation QSLEmailer (utilisé par la barre Journal) ---
         try:
             from tab_qsl import QSLEmailer
@@ -3248,6 +3252,315 @@ class StationMasterApp:
         ax.legend(loc='upper left', facecolor='#11273f', labelcolor='white', fontsize=8)
         self._prop_fig.tight_layout()
         self._prop_canvas.draw()
+
+    # ==========================================
+    # --- LOGBOOK ANALYSIS ---
+    # ==========================================
+
+    def _build_logbook_analysis_tab(self, parent):
+        """Tab Logbook Analysis — stats locales + graphiques + export CSV."""
+        BG = "#11273f"
+        BG2 = "#0d1e30"
+        FG = "#ffffff"
+        ACCENT = "#00d4ff"
+
+        self.logbook_qsos_var = tk.StringVar(value="Chargement...")
+        self.logbook_dxcc_var = tk.StringVar(value="--")
+        self.logbook_bands_var = tk.StringVar(value="--")
+        self.logbook_last_qso_var = tk.StringVar(value="--")
+        self.logbook_graph_var = tk.StringVar(value="Bandes")
+
+        paned = tk.PanedWindow(parent, orient="horizontal", sashrelief="raised", sashwidth=6, bg=BG)
+        paned.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # --- Panneau gauche : stats numériques + contrôles ---
+        left_frame = tk.Frame(paned, bg=BG)
+        paned.add(left_frame, minsize=360)
+
+        left_canvas = tk.Canvas(left_frame, bg=BG, highlightthickness=0)
+        left_sb = ttk.Scrollbar(left_frame, orient="vertical", command=left_canvas.yview)
+        left_scrollable = tk.Frame(left_canvas, bg=BG)
+
+        left_scrollable.bind(
+            "<Configure>",
+            lambda e: left_canvas.configure(scrollregion=left_canvas.bbox("all"))
+        )
+        left_canvas.create_window((0, 0), window=left_scrollable, anchor="nw")
+        left_canvas.configure(yscrollcommand=left_sb.set)
+
+        left_canvas.pack(side="left", fill="both", expand=True)
+        left_sb.pack(side="right", fill="y")
+
+        # --- Bloc 1 : stats globales ---
+        def make_stat_box(parent, title, var):
+            box = tk.Frame(parent, bg=BG2, relief="groove", borderwidth=2)
+            box.pack(fill="x", padx=5, pady=5)
+            tk.Label(box, text=title, fg=ACCENT, bg=BG2, font=("Segoe UI", 9, "bold")).pack(pady=(5, 0))
+            tk.Label(box, textvariable=var, fg=FG, bg=BG2, font=("Arial", 14, "bold")).pack(pady=(0, 5))
+            return box
+
+        make_stat_box(left_scrollable, "📊 QSOs Total", self.logbook_qsos_var)
+        make_stat_box(left_scrollable, "📡 Indicatifs confirmés", self.logbook_dxcc_var)
+        make_stat_box(left_scrollable, "📻 Bandes actives", self.logbook_bands_var)
+        make_stat_box(left_scrollable, "📅 Dernier QSO", self.logbook_last_qso_var)
+
+        # --- Bloc 2 : stats par bande (treeview) ---
+        stats_frame = tk.LabelFrame(
+            left_scrollable, text="📋 Par bande", bg=BG2, fg=ACCENT, relief="groove", borderwidth=2
+        )
+        stats_frame.pack(fill="x", padx=5, pady=5)
+
+        self.logbook_band_tree = ttk.Treeview(
+            stats_frame, columns=("band", "qsos", "pct", "dxcc"), height=8, show="headings"
+        )
+        self.logbook_band_tree.column("band", width=60, anchor="center")
+        self.logbook_band_tree.column("qsos", width=60, anchor="center")
+        self.logbook_band_tree.column("pct", width=60, anchor="center")
+        self.logbook_band_tree.column("dxcc", width=60, anchor="center")
+        self.logbook_band_tree.heading("band", text="Bande")
+        self.logbook_band_tree.heading("qsos", text="QSOs")
+        self.logbook_band_tree.heading("pct", text="%")
+        self.logbook_band_tree.heading("dxcc", text="DXCC")
+        self.logbook_band_tree.pack(fill="both", padx=5, pady=5)
+
+        # --- Bloc 3 : contrôles ---
+        btn_frame = tk.Frame(left_scrollable, bg=BG)
+        btn_frame.pack(fill="x", padx=5, pady=5)
+
+        tk.Button(
+            btn_frame, text="🔄 Actualiser", command=self._refresh_logbook_analysis,
+            bg=ACCENT, fg="#000", font=("Segoe UI", 9, "bold"), padx=10
+        ).pack(side="left", padx=2)
+
+        tk.Button(
+            btn_frame, text="📤 Export CSV", command=self._export_logbook_csv,
+            bg=ACCENT, fg="#000", font=("Segoe UI", 9, "bold"), padx=10
+        ).pack(side="left", padx=2)
+
+        # --- Panneau droit : graphiques ---
+        right_frame = tk.Frame(paned, bg=BG)
+        paned.add(right_frame, minsize=400)
+
+        graph_control = tk.Frame(right_frame, bg=BG)
+        graph_control.pack(fill="x", padx=5, pady=5)
+
+        tk.Label(graph_control, text="Graphique:", fg=ACCENT, bg=BG, font=("Segoe UI", 9, "bold")).pack(side="left", padx=5)
+
+        graph_combo = ttk.Combobox(
+            graph_control, textvariable=self.logbook_graph_var,
+            values=["Bandes", "Modes", "USA States", "Timeline", "Awards"],
+            state="readonly", width=15
+        )
+        graph_combo.pack(side="left", padx=5)
+        graph_combo.bind("<<ComboboxSelected>>", lambda e: self._draw_logbook_graph())
+
+        tk.Button(
+            graph_control, text="Générer", command=self._draw_logbook_graph,
+            bg=ACCENT, fg="#000", font=("Segoe UI", 9, "bold"), padx=10
+        ).pack(side="left", padx=5)
+
+        self.logbook_graph_frame = tk.Frame(right_frame, bg=BG2)
+        self.logbook_graph_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.root.after(1000, self._refresh_logbook_analysis)
+
+    def _refresh_logbook_analysis(self):
+        threading.Thread(target=self._fetch_logbook_data, daemon=True).start()
+
+    def _fetch_logbook_data(self):
+        """Stats locales (DB sqlite) pour le tab Logbook Analysis."""
+        try:
+            cursor = self.conn.cursor()
+
+            cursor.execute("SELECT COUNT(*) FROM qsos")
+            total_qsos = cursor.fetchone()[0]
+
+            cursor.execute("""
+                SELECT COUNT(DISTINCT callsign)
+                FROM qsos
+                WHERE qsl_rcvd = 'Y' OR lotw_stat = 'Y' OR eqsl_stat = 'Y'
+            """)
+            dxcc_confirmed = cursor.fetchone()[0]
+
+            cursor.execute("SELECT DISTINCT band FROM qsos ORDER BY band")
+            bands = [row[0] for row in cursor.fetchall()]
+            bands_str = ", ".join(bands) if bands else "--"
+
+            cursor.execute("""
+                SELECT callsign, qso_date, time_on, band, mode
+                FROM qsos
+                ORDER BY qso_date DESC, time_on DESC
+                LIMIT 1
+            """)
+            last_qso_row = cursor.fetchone()
+            if last_qso_row:
+                last_qso_str = f"{last_qso_row[0]} - {last_qso_row[2]} UTC ({last_qso_row[3]}, {last_qso_row[4]})"
+            else:
+                last_qso_str = "Aucun QSO"
+
+            cursor.execute("""
+                SELECT
+                    band,
+                    COUNT(*) as qsos,
+                    COUNT(CASE WHEN qsl_rcvd = 'Y' OR lotw_stat = 'Y' OR eqsl_stat = 'Y' THEN 1 END) as dxcc
+                FROM qsos
+                GROUP BY band
+                ORDER BY band
+            """)
+            band_stats = cursor.fetchall()
+
+            band_data = []
+            for band, qsos, dxcc in band_stats:
+                pct = (qsos / total_qsos * 100) if total_qsos > 0 else 0
+                band_data.append((band, qsos, f"{pct:.1f}%", dxcc))
+
+            self.root.after(0, lambda: self._update_logbook_ui(
+                total_qsos, dxcc_confirmed, bands_str, last_qso_str, band_data
+            ))
+        except Exception as e:
+            print(f"❌ Erreur fetch logbook: {e}")
+            self.root.after(0, lambda: self.status_var.set(f"⚠️ Erreur logbook: {str(e)[:50]}"))
+
+    def _update_logbook_ui(self, total_qsos, dxcc_confirmed, bands_str, last_qso_str, band_data):
+        """Met à jour les widgets du tab Logbook Analysis."""
+        self.logbook_qsos_var.set(str(total_qsos))
+        self.logbook_dxcc_var.set(str(dxcc_confirmed))
+        self.logbook_bands_var.set(bands_str)
+        self.logbook_last_qso_var.set(last_qso_str)
+
+        for item in self.logbook_band_tree.get_children():
+            self.logbook_band_tree.delete(item)
+        for band, qsos, pct, dxcc in band_data:
+            self.logbook_band_tree.insert("", "end", values=(band, qsos, pct, dxcc))
+
+        self.status_var.set("✅ Logbook mis à jour")
+
+    def _draw_logbook_graph(self):
+        """Dessine le graphique sélectionné dans logbook_graph_frame."""
+        if not getattr(self, '_prop_matplotlib_ok', False) and not getattr(self, '_matplotlib_ok', False):
+            try:
+                import matplotlib
+                matplotlib.use("TkAgg")
+            except ImportError:
+                self.status_var.set("⚠️ matplotlib non installé")
+                return
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+        try:
+            graph_type = self.logbook_graph_var.get()
+
+            for w in self.logbook_graph_frame.winfo_children():
+                w.destroy()
+
+            cursor = self.conn.cursor()
+            fig = Figure(figsize=(6, 4), dpi=100, facecolor="#11273f")
+            ax = fig.add_subplot(111)
+            ax.set_facecolor("#0d1e30")
+            ax.tick_params(colors="#ffffff")
+
+            if graph_type == "Bandes":
+                cursor.execute("SELECT band, COUNT(*) FROM qsos GROUP BY band ORDER BY band")
+                data = cursor.fetchall()
+                bands = [row[0] for row in data]
+                qsos = [row[1] for row in data]
+                ax.bar(bands, qsos, color="#00d4ff", edgecolor="#ffffff")
+                ax.set_xlabel("Bande", color="#ffffff")
+                ax.set_ylabel("QSOs", color="#ffffff")
+                ax.set_title("QSOs par bande", color="#00d4ff", fontsize=12, fontweight="bold")
+                ax.grid(True, alpha=0.2, color="#ffffff")
+
+            elif graph_type == "Modes":
+                cursor.execute("SELECT mode, COUNT(*) FROM qsos GROUP BY mode ORDER BY mode")
+                data = cursor.fetchall()
+                modes = [row[0] for row in data]
+                qsos = [row[1] for row in data]
+                ax.pie(qsos, labels=modes, autopct="%1.1f%%",
+                       colors=["#00d4ff", "#ff6b9d", "#4ecdc4", "#95e1d3"])
+                ax.set_title("QSOs par mode", color="#00d4ff", fontsize=12, fontweight="bold")
+
+            elif graph_type == "USA States":
+                cursor.execute("""
+                    SELECT callsign FROM qsos
+                    WHERE callsign LIKE 'W%' OR callsign LIKE 'K%' OR callsign LIKE 'N%'
+                """)
+                usa_calls = len(cursor.fetchall())
+                ax.text(0.5, 0.5, f"USA: {usa_calls}\nQSOs", ha="center", va="center",
+                        fontsize=20, color="#00d4ff", fontweight="bold", transform=ax.transAxes)
+                ax.axis("off")
+
+            elif graph_type == "Timeline":
+                cursor.execute("""
+                    SELECT qso_date, COUNT(*) FROM qsos
+                    GROUP BY qso_date
+                    ORDER BY qso_date
+                    LIMIT 100
+                """)
+                data = cursor.fetchall()
+                dates = [row[0] for row in data]
+                qsos = [row[1] for row in data]
+                ax.plot(range(len(dates)), qsos, color="#00d4ff", linewidth=2, marker="o")
+                ax.set_xlabel("Temps (derniers 100 jours)", color="#ffffff")
+                ax.set_ylabel("QSOs", color="#ffffff")
+                ax.set_title("Activité au fil du temps", color="#00d4ff", fontsize=12, fontweight="bold")
+                ax.grid(True, alpha=0.2, color="#ffffff")
+
+            elif graph_type == "Awards":
+                cursor.execute("SELECT COUNT(DISTINCT callsign) FROM qsos WHERE qsl_rcvd = 'Y' OR lotw_stat = 'Y'")
+                dxcc = cursor.fetchone()[0]
+                awards = ["DXCC", "WAZ\n(est.)", "WAS\n(est.)"]
+                counts = [min(dxcc, 337), 40, 50]
+                colors = ["#00d4ff", "#ff6b9d", "#4ecdc4"]
+                bars = ax.bar(awards, counts, color=colors, edgecolor="#ffffff")
+                ax.set_ylabel("Confirmés", color="#ffffff")
+                ax.set_title("Awards (estimés)", color="#00d4ff", fontsize=12, fontweight="bold")
+                ax.set_ylim(0, 350)
+                ax.grid(True, alpha=0.2, axis="y", color="#ffffff")
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                            f'{int(height)}', ha='center', va='bottom', color="#ffffff", fontsize=10)
+
+            fig.tight_layout()
+            canvas = FigureCanvasTkAgg(fig, master=self.logbook_graph_frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+
+            self.status_var.set(f"✅ Graphique '{graph_type}' généré")
+        except Exception as e:
+            print(f"❌ Erreur graphique logbook: {e}")
+            self.status_var.set(f"⚠️ Erreur graphique: {str(e)[:50]}")
+
+    def _export_logbook_csv(self):
+        """Exporte le logbook en CSV."""
+        try:
+            import csv
+            from datetime import datetime
+
+            filename = f"logbook_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filepath = os.path.join(_APP_DIR, filename)
+
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM qsos ORDER BY qso_date DESC, time_on DESC")
+            rows = cursor.fetchall()
+
+            headers = [
+                "ID", "Date", "Heure UTC", "Indicatif", "Bande", "Mode",
+                "RST Envoyé", "RST Reçu", "Nom", "QTH", "QSL Envoyée",
+                "QSL Reçue", "Distance km", "Grille", "Fréquence", "QRZ",
+                "eQSL", "LoTW", "Club Log", "Commentaire", "QSL Email envoyé"
+            ]
+
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+            self.status_var.set(f"✅ Exporté: {filename}")
+            print(f"📤 CSV exporté: {filepath}")
+        except Exception as e:
+            print(f"❌ Erreur export: {e}")
+            self.status_var.set(f"⚠️ Erreur export: {str(e)[:50]}")
 
     # ==========================================
     # --- AWARDS / MÉMOIRES — données de classe ---

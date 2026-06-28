@@ -196,8 +196,11 @@ def load_config_safe():
 CTY_FILE = os.path.join(_APP_DIR, 'cty.dat')
 CTY_URL  = 'https://www.country-files.com/cty/cty.dat'
 
-_cty_prefixes = {}   # prefix -> country name
-_cty_exact    = {}   # exact callsign -> country name
+_cty_prefixes     = {}   # prefix -> country name
+_cty_exact        = {}   # exact callsign -> country name
+_cty_country_zone = {}   # country name -> zone CQ par défaut
+_cty_prefix_zone  = {}   # prefix -> zone CQ (override spécifique)
+_cty_exact_zone   = {}   # indicatif exact -> zone CQ (override spécifique)
 _cty_loaded   = False
 
 def _download_cty():
@@ -215,15 +218,18 @@ def _download_cty():
         return False
 
 def _parse_cty(path):
-    """Parse cty.dat et retourne (prefixes_dict, exact_dict)."""
-    prefixes = {}
-    exact    = {}
+    """Parse cty.dat et retourne (prefixes, exact, country_zone, prefix_zone, exact_zone)."""
+    prefixes      = {}
+    exact         = {}
+    country_zone  = {}
+    prefix_zone   = {}
+    exact_zone    = {}
     try:
         with open(path, encoding='utf-8', errors='ignore') as f:
             text = f.read()
     except Exception as e:
         print(f"[cty.dat] Lecture échouée : {e}")
-        return prefixes, exact
+        return prefixes, exact, country_zone, prefix_zone, exact_zone
 
     # Chaque entrée se termine par ';'
     for record in text.split(';'):
@@ -247,6 +253,9 @@ def _parse_cty(path):
         country = parts[0].strip()
         if not country:
             continue
+        default_zone = parts[1].strip()
+        if default_zone:
+            country_zone[country] = default_zone
 
         # Tous les alias (préfixes) de l'entrée
         alias_text = ' '.join(alias_lines)
@@ -254,6 +263,11 @@ def _parse_cty(path):
             token = token.strip()
             if not token:
                 continue
+            # Zone CQ spécifique au préfixe/indicatif, ex: =AA0BY(5)[8]
+            zone_override = None
+            m = re.search(r'\((\d+)\)', token)
+            if m:
+                zone_override = m.group(1)
             # Supprimer les modificateurs : [15] {23} (EU) <lat/lon> ~
             clean = re.sub(r'[\[{(][^\]})]*[\]})]', '', token)
             clean = clean.replace('~', '').strip()
@@ -261,22 +275,29 @@ def _parse_cty(path):
                 continue
             if clean.startswith('='):
                 # Indicatif exact (ex: =W1AW)
-                exact[clean[1:].upper()] = country
+                call_u = clean[1:].upper()
+                exact[call_u] = country
+                if zone_override:
+                    exact_zone[call_u] = zone_override
             else:
-                prefixes[clean.upper()] = country
+                pfx_u = clean.upper()
+                prefixes[pfx_u] = country
+                if zone_override:
+                    prefix_zone[pfx_u] = zone_override
 
     print(f"[cty.dat] Parsé : {len(prefixes)} préfixes, {len(exact)} indicatifs exacts")
-    return prefixes, exact
+    return prefixes, exact, country_zone, prefix_zone, exact_zone
 
 def _load_cty():
     """Charge cty.dat (télécharge si absent)."""
-    global _cty_prefixes, _cty_exact, _cty_loaded
+    global _cty_prefixes, _cty_exact, _cty_country_zone, _cty_prefix_zone, _cty_exact_zone, _cty_loaded
     if _cty_loaded:
         return
     if not os.path.exists(CTY_FILE):
         _download_cty()
     if os.path.exists(CTY_FILE):
-        _cty_prefixes, _cty_exact = _parse_cty(CTY_FILE)
+        (_cty_prefixes, _cty_exact, _cty_country_zone,
+         _cty_prefix_zone, _cty_exact_zone) = _parse_cty(CTY_FILE)
     _cty_loaded = True
 
 def _prefix_lookup(call):
@@ -311,6 +332,41 @@ def get_country_name(callsign):
 
     # Recherche standard sur la partie principale
     return _prefix_lookup(parts[0]) or _prefix_lookup(call) or ""
+
+def _zone_prefix_lookup(call):
+    """Recherche par plus long préfixe correspondant dans les overrides de zone CQ."""
+    for length in range(min(len(call), 6), 0, -1):
+        zone = _cty_prefix_zone.get(call[:length])
+        if zone:
+            return zone
+    return ""
+
+def get_cq_zone(callsign):
+    """Retourne la zone CQ (WAZ) d'un indicatif via cty.dat (override préfixe puis défaut pays)."""
+    if not callsign:
+        return ""
+    if not _cty_loaded:
+        _load_cty()
+    call = callsign.upper().strip()
+
+    if call in _cty_exact_zone:
+        return _cty_exact_zone[call]
+
+    parts = call.split('/')
+    if len(parts) == 2:
+        suffix = parts[1]
+        if 1 <= len(suffix) <= 4 and not suffix.isdigit():
+            res = _zone_prefix_lookup(suffix)
+            if res:
+                return res
+
+    zone = _zone_prefix_lookup(parts[0]) or _zone_prefix_lookup(call)
+    if zone:
+        return zone
+
+    # Pas d'override spécifique : zone par défaut du pays DXCC
+    country = get_country_name(callsign)
+    return _cty_country_zone.get(country, "")
 
 # ==========================================
 # --- FONCTIONS ---
@@ -1655,9 +1711,12 @@ class StationMasterApp:
             entity = get_country_name(call)
             if entity:
                 countries.add(entity)
-                zone = self.WAZ_ZONES.get(entity)
-                if zone:
-                    waz_set.add(zone)
+            zone = get_cq_zone(call)
+            if zone:
+                try:
+                    waz_set.add(int(zone))  # normalise "05" / "5" -> 5 (évite les doublons)
+                except ValueError:
+                    pass
             if call and call[0].upper() in ('K', 'W', 'N') and qth:
                 for state in self.USA_STATES:
                     if state.upper() in qth.upper():
@@ -3440,28 +3499,6 @@ class StationMasterApp:
 
         self.status_var.set("✅ Logbook mis à jour")
 
-    def _draw_was_detail(self, was_set):
-        """Affiche le détail des états WAS confirmés/manquants sous le graphique Awards."""
-        confirmed = sorted(was_set)
-        missing = sorted(set(self.USA_STATES) - was_set)
-
-        txt = tk.Text(self.logbook_graph_frame, height=8, bg="#0d1e30", fg="#ffffff",
-                      font=("Consolas", 9), wrap="word", relief="flat", padx=8, pady=8)
-        txt.pack(fill="both", expand=True, padx=5, pady=(5, 0))
-        txt.tag_configure("title", font=("Consolas", 9, "bold"), foreground="#00d4ff")
-        txt.tag_configure("ok", foreground="#3fb950")
-        txt.tag_configure("warn", foreground="#f85149")
-
-        txt.insert("end", f"✅ États confirmés ({len(confirmed)}/50) :\n", "title")
-        txt.insert("end", (", ".join(confirmed) if confirmed else "— aucun —") + "\n\n", "ok")
-        if missing:
-            txt.insert("end", f"❌ États manquants ({len(missing)}) :\n", "title")
-            txt.insert("end", ", ".join(missing), "warn")
-        else:
-            txt.insert("end", "🏆 WAS complet — les 50 états sont confirmés !", "ok")
-
-        txt.config(state="disabled")
-
     def _draw_logbook_graph(self):
         """Dessine le graphique sélectionné dans logbook_graph_frame."""
         if not getattr(self, '_prop_matplotlib_ok', False) and not getattr(self, '_matplotlib_ok', False):
@@ -3498,12 +3535,18 @@ class StationMasterApp:
                 ax.grid(True, alpha=0.2, color="#ffffff")
 
             elif graph_type == "Modes":
-                cursor.execute("SELECT mode, COUNT(*) FROM qsos GROUP BY mode ORDER BY mode")
+                cursor.execute("SELECT mode, COUNT(*) FROM qsos GROUP BY mode ORDER BY COUNT(*) DESC")
                 data = cursor.fetchall()
                 modes = [row[0] for row in data]
                 qsos = [row[1] for row in data]
-                ax.pie(qsos, labels=modes, autopct="%1.1f%%",
-                       colors=["#00d4ff", "#ff6b9d", "#4ecdc4", "#95e1d3"])
+                colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c',
+                          '#e67e22','#34495e','#e91e63','#00bcd4','#8bc34a']
+                wedges, texts, autotexts = ax.pie(
+                    qsos, labels=modes, autopct="%1.1f%%",
+                    colors=colors[:len(qsos)] if len(qsos) <= len(colors) else None,
+                    startangle=90, textprops={'color': 'white'})
+                for at in autotexts:
+                    at.set_fontsize(8)
                 ax.set_title("QSOs par mode", color="#00d4ff", fontsize=12, fontweight="bold")
 
             elif graph_type == "USA States":
@@ -3549,12 +3592,7 @@ class StationMasterApp:
             fig.tight_layout()
             canvas = FigureCanvasTkAgg(fig, master=self.logbook_graph_frame)
             canvas.draw()
-
-            if graph_type == "Awards":
-                canvas.get_tk_widget().pack(fill="x")
-                self._draw_was_detail(was_set)
-            else:
-                canvas.get_tk_widget().pack(fill="both", expand=True)
+            canvas.get_tk_widget().pack(fill="both", expand=True)
 
             self.status_var.set(f"✅ Graphique '{graph_type}' généré")
         except Exception as e:
@@ -3596,20 +3634,7 @@ class StationMasterApp:
     # --- AWARDS / MÉMOIRES — données de classe ---
     # ==========================================
 
-    # Zones WAZ (CQ zones) par entité DXCC (simplifié)
-    WAZ_ZONES = {
-        "Belgium":14,"France":14,"Germany":14,"England":14,"Italy":15,"Spain":14,
-        "Portugal":14,"Netherlands":14,"Switzerland":14,"Austria":15,"Denmark":14,
-        "Norway":14,"Sweden":18,"Finland":18,"Iceland":40,"Ireland":14,
-        "Poland":15,"Czech Rep.":15,"Slovakia":15,"Hungary":15,"Romania":20,
-        "Bulgaria":20,"Greece":20,"Croatia":15,"Slovenia":15,"Turkey":20,
-        "Russia (EU)":16,"Russia (AS)":17,"Ukraine":16,"Belarus":16,
-        "Japan":25,"China":24,"South Korea":25,"Taiwan":24,"India":26,
-        "Australia":29,"New Zealand":32,"USA":3,"Canada":4,"Mexico":6,
-        "Brazil":11,"Argentina":13,"Chile":12,"Colombia":9,"Venezuela":9,
-        "South Africa":38,"Kenya":34,"Nigeria":35,"Egypt":33,"Morocco":33,
-        "Saudi Arabia":21,"Israel":20,"Iran":21,"Pakistan":21,
-    }
+    # Zones WAZ (CQ zones) : calculées depuis cty.dat via get_cq_zone(), voir _compute_award_stats
 
     # États USA pour WAS
     USA_STATES = [

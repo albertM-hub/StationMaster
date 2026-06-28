@@ -1643,6 +1643,27 @@ class StationMasterApp:
         self._psk_spots = spots
         self.root.after(0, self._refresh_psk_tab)
 
+    def _compute_award_stats(self):
+        """Calcule les stats réelles DXCC/WAZ/WAS depuis la DB (sans cap arbitraire).
+        Retourne (dxcc_n, waz_n, was_set) — was_set permet d'afficher le détail.
+        """
+        c = self.conn.cursor()
+        countries = set()
+        waz_set = set()
+        was_set = set()
+        for call, qth in c.execute("SELECT callsign, qth FROM qsos"):
+            entity = get_country_name(call)
+            if entity:
+                countries.add(entity)
+                zone = self.WAZ_ZONES.get(entity)
+                if zone:
+                    waz_set.add(zone)
+            if call and call[0].upper() in ('K', 'W', 'N') and qth:
+                for state in self.USA_STATES:
+                    if state.upper() in qth.upper():
+                        was_set.add(state)
+        return len(countries), len(waz_set), was_set
+
     def _refresh_dashboard(self):
         """Met à jour tous les widgets du dashboard."""
         try:
@@ -1710,23 +1731,7 @@ class StationMasterApp:
                 )
 
             # Awards bars
-            dxcc_n = len(countries)
-            calls = c.execute("SELECT callsign FROM qsos").fetchall()
-            # WAZ estimation
-            waz_set = set()
-            for (call,) in calls:
-                entity = get_country_name(call)
-                zone = self.WAZ_ZONES.get(entity)
-                if zone: waz_set.add(zone)
-            waz_n = len(waz_set)
-            # WAS estimation
-            rows_was = c.execute("SELECT callsign, qth FROM qsos").fetchall()
-            was_set = set()
-            for call, qth in rows_was:
-                if call and call[0].upper() in ('K','W','N') and qth:
-                    for state in self.USA_STATES:
-                        if state.upper() in qth.upper():
-                            was_set.add(state)
+            dxcc_n, waz_n, was_set = self._compute_award_stats()
             was_n = len(was_set)
 
             award_vals = {"DXCC 100": dxcc_n, "DXCC 200": dxcc_n, "DXCC 300": dxcc_n,
@@ -3435,6 +3440,28 @@ class StationMasterApp:
 
         self.status_var.set("✅ Logbook mis à jour")
 
+    def _draw_was_detail(self, was_set):
+        """Affiche le détail des états WAS confirmés/manquants sous le graphique Awards."""
+        confirmed = sorted(was_set)
+        missing = sorted(set(self.USA_STATES) - was_set)
+
+        txt = tk.Text(self.logbook_graph_frame, height=8, bg="#0d1e30", fg="#ffffff",
+                      font=("Consolas", 9), wrap="word", relief="flat", padx=8, pady=8)
+        txt.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        txt.tag_configure("title", font=("Consolas", 9, "bold"), foreground="#00d4ff")
+        txt.tag_configure("ok", foreground="#3fb950")
+        txt.tag_configure("warn", foreground="#f85149")
+
+        txt.insert("end", f"✅ États confirmés ({len(confirmed)}/50) :\n", "title")
+        txt.insert("end", (", ".join(confirmed) if confirmed else "— aucun —") + "\n\n", "ok")
+        if missing:
+            txt.insert("end", f"❌ États manquants ({len(missing)}) :\n", "title")
+            txt.insert("end", ", ".join(missing), "warn")
+        else:
+            txt.insert("end", "🏆 WAS complet — les 50 états sont confirmés !", "ok")
+
+        txt.config(state="disabled")
+
     def _draw_logbook_graph(self):
         """Dessine le graphique sélectionné dans logbook_graph_frame."""
         if not getattr(self, '_prop_matplotlib_ok', False) and not getattr(self, '_matplotlib_ok', False):
@@ -3506,15 +3533,13 @@ class StationMasterApp:
                 ax.grid(True, alpha=0.2, color="#ffffff")
 
             elif graph_type == "Awards":
-                cursor.execute("SELECT COUNT(DISTINCT callsign) FROM qsos WHERE qsl_rcvd = 'Y' OR lotw_stat = 'Y'")
-                dxcc = cursor.fetchone()[0]
-                awards = ["DXCC", "WAZ\n(est.)", "WAS\n(est.)"]
-                counts = [min(dxcc, 337), 40, 50]
+                dxcc_n, waz_n, was_set = self._compute_award_stats()
+                awards = ["DXCC", "WAZ", "WAS"]
+                counts = [dxcc_n, waz_n, len(was_set)]
                 colors = ["#00d4ff", "#ff6b9d", "#4ecdc4"]
                 bars = ax.bar(awards, counts, color=colors, edgecolor="#ffffff")
-                ax.set_ylabel("Confirmés", color="#ffffff")
-                ax.set_title("Awards (estimés)", color="#00d4ff", fontsize=12, fontweight="bold")
-                ax.set_ylim(0, 350)
+                ax.set_ylabel("Travaillés", color="#ffffff")
+                ax.set_title("Awards", color="#00d4ff", fontsize=12, fontweight="bold")
                 ax.grid(True, alpha=0.2, axis="y", color="#ffffff")
                 for bar in bars:
                     height = bar.get_height()
@@ -3524,7 +3549,12 @@ class StationMasterApp:
             fig.tight_layout()
             canvas = FigureCanvasTkAgg(fig, master=self.logbook_graph_frame)
             canvas.draw()
-            canvas.get_tk_widget().pack(fill="both", expand=True)
+
+            if graph_type == "Awards":
+                canvas.get_tk_widget().pack(fill="x")
+                self._draw_was_detail(was_set)
+            else:
+                canvas.get_tk_widget().pack(fill="both", expand=True)
 
             self.status_var.set(f"✅ Graphique '{graph_type}' généré")
         except Exception as e:

@@ -4635,7 +4635,7 @@ class StationMasterApp:
             wiki_cluster_enrichi, wiki_spot_history, wiki_flex, wiki_awards,
             wiki_graphs, wiki_heatmap, wiki_propagation, wiki_grayline,
             wiki_psk, wiki_qsl, wiki_cat, wiki_config, wiki_troubleshoot,
-            wiki_ft8_decodium, wiki_spe_expert,
+            wiki_ft8_decodium, wiki_spe_expert, wiki_logbook_analysis,
         )
         nb_wiki = ttk.Notebook(parent, bootstyle="info")
         nb_wiki.pack(fill="both", expand=True, padx=5, pady=5)
@@ -4652,6 +4652,7 @@ class StationMasterApp:
             "📊 Graphiques & Stats": wiki_graphs(),
             "🗺️ Heatmap":          wiki_heatmap(),
             "🌐 Propagation":      wiki_propagation(),
+            "📊 Logbook Analysis": wiki_logbook_analysis(),
             "🌙 Grayline":         wiki_grayline(),
             "📻 PSK Reporter":     wiki_psk(),
             "🖨️ QSL & LoTW":       wiki_qsl(),

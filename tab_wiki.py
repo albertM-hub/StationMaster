@@ -416,6 +416,13 @@ def wiki_propagation():
         ("","  Les lignes pointillées indiquent les fréquences des bandes HF"),
         ("","  La ligne verticale blanche = heure actuelle UTC"),
         ("",""),
+        ("h2","  Jauges SFI / K-index / A-index"),
+        ("","  Cadrans semi-circulaires style S-mètre, mis à jour à chaque actualisation :"),
+        ("ok","  SFI   — zones : <70 rouge, 70-120 jaune, 120-200 vert, >200 violet"),
+        ("ok","  K-index — zones : 0-2 vert, 3-4 jaune, 5-6 orange, 7-9 rouge"),
+        ("ok","  A-index — zones : 0-10 vert, 10-30 jaune, 30-50 orange, >50 rouge"),
+        ("tip","  💡 L'aiguille blanche pointe la valeur actuelle dans la zone colorée correspondante"),
+        ("",""),
         ("h2","  🎯 VOACAP P2P — Propagation point à point"),
         ("","  Calcule la propagation prévisionnelle entre votre QTH et une entité DXCC cible."),
         ("ok","  ✅ Entrez l'indicatif ou le préfixe cible dans le champ '🎯 Destination'"),
@@ -431,6 +438,39 @@ def wiki_propagation():
         ("h2","  Liens utiles"),
         ("","  • 🌐 DX Maps    → spots temps réel par bande"),
         ("","  • 📡 VOACAP     → prévisions de propagation point à point"),
+    ]
+
+
+def wiki_logbook_analysis():
+    return [
+        ("h1","  📊 Logbook Analysis"),
+        ("",""),
+        ("h2","  Statistiques globales"),
+        ("","  Quatre cadrans mis à jour via le bouton 🔄 Actualiser :"),
+        ("ok","  📊 QSOs Total          — nombre total de contacts dans le journal"),
+        ("ok","  📡 Indicatifs confirmés — indicatifs distincts avec QSL reçue (QSL/LoTW/eQSL)"),
+        ("ok","  📻 Bandes actives      — liste de toutes les bandes utilisées"),
+        ("ok","  📅 Dernier QSO         — indicatif, heure UTC, bande et mode du contact le plus récent"),
+        ("tip","  💡 'Indicatifs confirmés' compte des indicatifs, pas des entités DXCC réelles"),
+        ("",""),
+        ("h2","  Tableau par bande"),
+        ("","  Treeview avec, pour chaque bande : nombre de QSOs, pourcentage du total"),
+        ("","  et nombre de contacts confirmés sur cette bande."),
+        ("",""),
+        ("h2","  Graphiques"),
+        ("","  Choisissez le type dans la liste déroulante puis cliquez Générer :"),
+        ("ok","  • Bandes      — histogramme des QSOs par bande"),
+        ("ok","  • Modes       — camembert de répartition par mode"),
+        ("ok","  • USA States  — décompte rapide des indicatifs W/K/N (approximation)"),
+        ("ok","  • Timeline    — activité quotidienne sur les 100 derniers jours"),
+        ("ok","  • Awards      — DXCC / WAZ / WAS estimés sous forme de barres"),
+        ("tip","  💡 Requiert matplotlib (déjà nécessaire pour les autres graphiques de l'app)"),
+        ("",""),
+        ("h2","  Export CSV"),
+        ("","  Bouton 📤 Export CSV → génère logbook_export_AAAAMMJJ_HHMMSS.csv"),
+        ("","  dans le dossier de station_master.py, avec toutes les colonnes du journal."),
+        ("code","  Colonnes : ID, Date, Heure UTC, Indicatif, Bande, Mode, RST..., QSL..., Commentaire"),
+        ("tip","  💡 Format compatible pour analyse externe, ex. hamanalyst.org"),
     ]
 
 

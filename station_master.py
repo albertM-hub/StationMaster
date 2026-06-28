@@ -2885,11 +2885,21 @@ class StationMasterApp:
     # --- ONGLET PROPAGATION ---
     # ==========================================
     def _build_propagation_tab(self, parent):
+        # Import matplotlib une seule fois, utilisé par les jauges et le graphique MUF
+        try:
+            import matplotlib
+            matplotlib.use("TkAgg")
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            self._prop_matplotlib_ok = True
+        except ImportError:
+            self._prop_matplotlib_ok = False
+
         # Panneau gauche : données solaires et conditions de propagation
         paned = tk.PanedWindow(parent, orient="horizontal", sashrelief="raised", sashwidth=6, bg="#11273f")
         paned.pack(fill="both", expand=True)
 
-        left = ttk.Frame(paned, padding=10); paned.add(left, minsize=320)
+        left = ttk.Frame(paned, padding=10); paned.add(left, minsize=440)
         right = ttk.Frame(paned, padding=10); paned.add(right, minsize=400)
 
         # --- Gauche : données + greyline info ---
@@ -2901,9 +2911,27 @@ class StationMasterApp:
         ttk.Button(btn_fr, text="📡 VOACAP", command=lambda: __import__('webbrowser').open("https://www.voacap.com/hf/"), bootstyle="secondary-outline").pack(side="left", padx=5)
         ttk.Button(btn_fr, text="🎯 VOACAP P2P", command=self._open_voacap_p2p, bootstyle="warning-outline").pack(side="left", padx=5)
 
+        # --- Jauges semi-circulaires SFI / K-index / A-index ---
+        self.gauge_frame = tk.Frame(left, bg="#11273f"); self.gauge_frame.pack(fill="x", pady=(8,4))
+        self._gauges = {}
+        gauge_specs = {
+            "SFI":     (0, 300, [(70, "#e74c3c"), (120, "#f39c12"), (200, "#2ecc71"), (300, "#9b59b6")]),
+            "K-index": (0, 9,   [(2,  "#2ecc71"), (4,   "#f39c12"), (6,   "#e67e22"), (9,   "#e74c3c")]),
+            "A-index": (0, 100, [(10, "#2ecc71"), (30,  "#f39c12"), (50,  "#e67e22"), (100, "#e74c3c")]),
+        }
+        if self._prop_matplotlib_ok:
+            for key, (vmin, vmax, zones) in gauge_specs.items():
+                fig = Figure(figsize=(2.2, 1.5), dpi=90, facecolor="#11273f")
+                canvas = FigureCanvasTkAgg(fig, master=self.gauge_frame)
+                canvas.get_tk_widget().pack(side="left", padx=4)
+                self._gauges[key] = (fig, canvas, vmin, vmax, zones)
+                self._draw_gauge(key, "0")
+        else:
+            ttk.Label(self.gauge_frame, text="⚠️ matplotlib requis pour les jauges", foreground="gray").pack()
+
         self.prop_data_frame = tk.Frame(left, bg="#11273f"); self.prop_data_frame.pack(fill="x", pady=10)
         self.prop_labels = {}
-        for key in ["SFI","SN","K-index","A-index","Conditions","Hémisphère N","Hémisphère S"]:
+        for key in ["SN","Conditions","Hémisphère N","Hémisphère S"]:
             f = ttk.Frame(self.prop_data_frame); f.pack(fill="x", pady=2)
             ttk.Label(f, text=f"{key}:", width=16, anchor="e", foreground="#888").pack(side="left")
             lbl = ttk.Label(f, text="--", font=("Consolas",11,"bold"), foreground="white")
@@ -2940,17 +2968,11 @@ class StationMasterApp:
         # --- Droite : graphique MUF / ionosphère ---
         ttk.Label(right, text="🔭 IONOSPHÈRE / MUF", font=("Consolas",13,"bold"), foreground="#3fb950").pack(anchor="w", pady=(0,5))
 
-        try:
-            import matplotlib
-            matplotlib.use("TkAgg")
-            from matplotlib.figure import Figure
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        if self._prop_matplotlib_ok:
             self._prop_fig = Figure(figsize=(7, 5), dpi=90, facecolor='#11273f')
             self._prop_canvas = FigureCanvasTkAgg(self._prop_fig, master=right)
             self._prop_canvas.get_tk_widget().pack(fill="both", expand=True)
-            self._prop_matplotlib_ok = True
-        except ImportError:
-            self._prop_matplotlib_ok = False
+        else:
             ttk.Label(right, text="⚠️ matplotlib requis pour les graphiques", foreground="gray").pack(expand=True)
 
         # Démarrer la mise à jour automatique après 1s (widgets déjà créés)
@@ -3012,6 +3034,45 @@ class StationMasterApp:
                 self.root.after(0, lambda: self.status_var.set("⚠️ Erreur lecture données propagation"))
             except RuntimeError: pass
 
+    def _draw_gauge(self, key, val_str):
+        """Dessine une jauge semi-circulaire style S-mètre pour SFI/K-index/A-index."""
+        if not getattr(self, '_prop_matplotlib_ok', False): return
+        if key not in getattr(self, '_gauges', {}): return
+        try:
+            val = float(val_str)
+        except (TypeError, ValueError):
+            return  # valeur invalide (ex: "--") -> on garde le dernier affichage
+
+        fig, canvas, vmin, vmax, zones = self._gauges[key]
+        val = max(vmin, min(vmax, val))
+        fig.clear()
+        fig.patch.set_facecolor("#11273f")
+        ax = fig.add_subplot(111, projection="polar")
+        ax.set_facecolor("#11273f")
+        ax.set_theta_zero_location("W")
+        ax.set_theta_direction(-1)
+        ax.set_thetamin(0); ax.set_thetamax(180)
+        ax.set_ylim(0, 1)
+        ax.set_yticks([]); ax.set_xticks([])
+        ax.grid(False)
+        ax.spines['polar'].set_visible(False)
+
+        prev = vmin
+        for threshold, color in zones:
+            t0 = math.pi * (prev - vmin) / (vmax - vmin)
+            t1 = math.pi * (threshold - vmin) / (vmax - vmin)
+            ax.bar((t0 + t1) / 2, 1.0, width=(t1 - t0), color=color, alpha=0.85, edgecolor="none")
+            prev = threshold
+
+        angle = math.pi * (val - vmin) / (vmax - vmin)
+        ax.plot([angle, angle], [0, 0.85], color="white", linewidth=2.5, solid_capstyle="round")
+        ax.plot([0], [0], marker='o', color="white", markersize=5)
+
+        fig.text(0.5, 0.04, f"{key}: {val_str}", ha="center", color="white",
+                  fontsize=9, fontweight="bold")
+        fig.tight_layout(pad=0.2, rect=(0, 0.12, 1, 1))
+        canvas.draw()
+
     def _k_to_condition(self, k_str):
         try:
             k = float(k_str)
@@ -3037,6 +3098,9 @@ class StationMasterApp:
             for cw, cv in color_map.items():
                 if cw.lower() in val.lower(): color = cv; break
             lbl.config(text=val, foreground=color)
+
+        for key in ("SFI", "K-index", "A-index"):
+            self._draw_gauge(key, data.get(key, "--"))
 
         # Greyline
         now = datetime.now(timezone.utc)

@@ -6,6 +6,8 @@ mon_logbook.db
 *.db
 *.db-shm
 *.db-wal
+*.adi
+*.adif
 
 # Données téléchargées automatiquement au runtime
 cty.dat
@@ -29,6 +31,7 @@ StationMaster_linux.spec
 # Backups locaux
 Backups/
 *.bak
+*.bak-*
 
 # Logs
 *.log

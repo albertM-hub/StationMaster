@@ -125,6 +125,21 @@ CONTINENT_PREFIXES = {
 CONT_LABELS = {"EU":"Europe","AS":"Asie","NA":"N.Amér","SA":"S.Amér",
                "OC":"Océanie","AF":"Afrique","?":"?"}
 
+# Les 50 états US pour le suivi WAS (code -> nom complet)
+US_STATES = {
+    "AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California",
+    "CO":"Colorado","CT":"Connecticut","DE":"Delaware","FL":"Florida","GA":"Georgia",
+    "HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa","KS":"Kansas",
+    "KY":"Kentucky","LA":"Louisiana","ME":"Maine","MD":"Maryland","MA":"Massachusetts",
+    "MI":"Michigan","MN":"Minnesota","MS":"Mississippi","MO":"Missouri","MT":"Montana",
+    "NE":"Nebraska","NV":"Nevada","NH":"New Hampshire","NJ":"New Jersey","NM":"New Mexico",
+    "NY":"New York","NC":"North Carolina","ND":"North Dakota","OH":"Ohio","OK":"Oklahoma",
+    "OR":"Oregon","PA":"Pennsylvania","RI":"Rhode Island","SC":"South Carolina",
+    "SD":"South Dakota","TN":"Tennessee","TX":"Texas","UT":"Utah","VT":"Vermont",
+    "VA":"Virginia","WA":"Washington","WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming",
+}
+WAS_BANDS = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m"]
+
 def get_continent(callsign):
     """Retourne le continent (EU/AS/NA/SA/OC/AF) d'un indicatif."""
     if not callsign: return "?"
@@ -1206,7 +1221,7 @@ class StationMasterApp:
     def create_table(self):
         c = self.conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS qsos (id INTEGER PRIMARY KEY AUTOINCREMENT, qso_date TEXT, time_on TEXT, callsign TEXT, band TEXT, mode TEXT, rst_sent TEXT, rst_rcvd TEXT, name TEXT, qth TEXT, qsl_sent TEXT, qsl_rcvd TEXT, distance TEXT, grid TEXT, freq TEXT, qrz_stat TEXT, eqsl_stat TEXT, lotw_stat TEXT, club_stat TEXT, comment TEXT)''')
-        for col in ["distance", "grid", "freq", "qrz_stat", "eqsl_stat", "lotw_stat", "club_stat", "comment"]:
+        for col in ["distance", "grid", "freq", "qrz_stat", "eqsl_stat", "lotw_stat", "club_stat", "comment", "state"]:
             try: c.execute(f"ALTER TABLE qsos ADD COLUMN {col} TEXT"); self.conn.commit()
             except: pass
         # Table DXCC confirmations
@@ -1492,10 +1507,6 @@ class StationMasterApp:
         t_spot_hist = tk.Frame(self.nb, bg=BG); self.nb.add(t_spot_hist, text="📜 Spot History")
         self._build_spot_history_tab(t_spot_hist)
 
-        # --- Onglet Statistiques avancées ---
-        t_stat = tk.Frame(self.nb, bg=BG); self.nb.add(t_stat, text="📈 Statistiques")
-        self._build_stats_tab(t_stat)
-
         # --- Onglet Graphiques ---
         t_graphs = tk.Frame(self.nb, bg=BG); self.nb.add(t_graphs, text="📊 Graphiques")
         self._build_graphs_tab(t_graphs)
@@ -1701,13 +1712,12 @@ class StationMasterApp:
 
     def _compute_award_stats(self):
         """Calcule les stats réelles DXCC/WAZ/WAS depuis la DB (sans cap arbitraire).
-        Retourne (dxcc_n, waz_n, was_set) — was_set permet d'afficher le détail.
+        Retourne (dxcc_n, waz_n, was_n).
         """
         c = self.conn.cursor()
         countries = set()
         waz_set = set()
-        was_set = set()
-        for call, qth in c.execute("SELECT callsign, qth FROM qsos"):
+        for (call,) in c.execute("SELECT callsign FROM qsos"):
             entity = get_country_name(call)
             if entity:
                 countries.add(entity)
@@ -1717,11 +1727,29 @@ class StationMasterApp:
                     waz_set.add(int(zone))  # normalise "05" / "5" -> 5 (évite les doublons)
                 except ValueError:
                     pass
-            if call and call[0].upper() in ('K', 'W', 'N') and qth:
-                for state in self.USA_STATES:
-                    if state.upper() in qth.upper():
-                        was_set.add(state)
-        return len(countries), len(waz_set), was_set
+        was_n = c.execute(
+            "SELECT COUNT(DISTINCT state) FROM qsos WHERE state IN ({})".format(
+                ",".join("?" * len(US_STATES)))
+            , list(US_STATES.keys())
+        ).fetchone()[0]
+        return len(countries), len(waz_set), was_n
+
+    def _compute_was_grid(self):
+        """Construit la matrice état -> {bande: nb QSO} pour le tableau WAS détail."""
+        c = self.conn.cursor()
+        grid = {}
+        for state, band, n in c.execute(
+            "SELECT state, UPPER(band), COUNT(*) FROM qsos "
+            "WHERE state != '' GROUP BY state, UPPER(band)"
+        ):
+            state = state.upper()
+            if state not in US_STATES:
+                continue
+            band = band.lower()
+            if band not in WAS_BANDS:
+                continue
+            grid.setdefault(state, {b: 0 for b in WAS_BANDS})[band] = n
+        return grid
 
     def _refresh_dashboard(self):
         """Met à jour tous les widgets du dashboard."""
@@ -1790,8 +1818,7 @@ class StationMasterApp:
                 )
 
             # Awards bars
-            dxcc_n, waz_n, was_set = self._compute_award_stats()
-            was_n = len(was_set)
+            dxcc_n, waz_n, was_n = self._compute_award_stats()
 
             award_vals = {"DXCC 100": dxcc_n, "DXCC 200": dxcc_n, "DXCC 300": dxcc_n,
                           "WAZ 40": waz_n, "WAS 50": was_n}
@@ -1831,7 +1858,7 @@ class StationMasterApp:
             for item in self.dash_tree_top.get_children():
                 self.dash_tree_top.delete(item)
             country_counts = {}
-            for (call,) in calls:
+            for (call,) in c.execute("SELECT callsign FROM qsos"):
                 cn = get_country_name(call)
                 if cn: country_counts[cn] = country_counts.get(cn, 0) + 1
             medals = ["🥇","🥈","🥉","4.","5."]
@@ -2717,86 +2744,6 @@ class StationMasterApp:
         if hasattr(self, '_apply_cluster_filter'):
             self._apply_cluster_filter()
 
-    # ==========================================
-    # --- ONGLET STATISTIQUES ---
-    # ==========================================
-    def _build_stats_tab(self, parent):
-        BG = "#11273f"
-        btn_fr = tk.Frame(parent, bg=BG); btn_fr.pack(fill="x", padx=10, pady=5)
-        ttk.Button(btn_fr, text="🔄 Actualiser", command=self.update_stats_view, bootstyle="primary").pack(side="left", padx=5)
-        ttk.Button(btn_fr, text="📋 Copier rapport", command=self._copy_stats, bootstyle="secondary-outline").pack(side="left", padx=5)
-        self.txt_stats = tk.Text(parent, font=("Consolas", 11), bg=BG, fg="white",
-                                 insertbackground="white", selectbackground="#1a5276",
-                                 padx=20, pady=20, relief="flat", borderwidth=0)
-        self.txt_stats.pack(fill="both", expand=True)
-
-    def update_stats_view(self):
-        self.txt_stats.delete("1.0", tk.END); c = self.conn.cursor()
-        lines = [f"=== RAPPORT DE STATION {MY_CALL} ===",
-                 f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ""]
-
-        # Total
-        total = c.execute("SELECT COUNT(*) FROM qsos").fetchone()[0]
-        lines.append(f"📊 TOTAL QSOs : {total}")
-        lines.append("")
-
-        # Par bande
-        lines.append("🎚️ CONTACTS PAR BANDE :")
-        lines.append("=" * 30)
-        bands = ["160M","80M","60M","40M","30M","20M","17M","15M","12M","10M","6M"]
-        for b in bands:
-            count = c.execute("SELECT COUNT(*) FROM qsos WHERE UPPER(band)=?", (b,)).fetchone()[0]
-            if count > 0:
-                bar = "█" * min(count // max(1, total // 30), 30)
-                lines.append(f"{b:<5} : {count:<5} {bar}")
-
-        # Par mode
-        lines.append("")
-        lines.append("📻 CONTACTS PAR MODE :")
-        lines.append("=" * 30)
-        for row in c.execute("SELECT mode, COUNT(*) as n FROM qsos GROUP BY mode ORDER BY n DESC"):
-            lines.append(f"{row[0]:<8}: {row[1]}")
-
-        # Par mois (12 derniers)
-        lines.append("")
-        lines.append("📅 QSOs PAR MOIS (12 derniers) :")
-        lines.append("=" * 30)
-        for row in c.execute("""
-            SELECT substr(qso_date,1,7) as ym, COUNT(*) as n 
-            FROM qsos GROUP BY ym ORDER BY ym DESC LIMIT 12"""):
-            bar = "█" * min(row[1] // max(1, total // 50), 20)
-            lines.append(f"{row[0]} : {row[1]:<5} {bar}")
-
-        # Top 15 pays
-        lines.append("")
-        lines.append("🏆 TOP 15 PAYS (DXCC Estimé) :")
-        lines.append("-" * 30)
-        calls = c.execute("SELECT callsign FROM qsos").fetchall()
-        countries = {}
-        for row in calls:
-            cn = get_country_name(row[0])
-            if cn: countries[cn] = countries.get(cn, 0) + 1
-        medals = ["🥇","🥈","🥉"]
-        for idx, (name, cnt) in enumerate(sorted(countries.items(), key=lambda x: x[1], reverse=True)[:15]):
-            prefix = medals[idx] if idx < 3 else f"#{idx+1} "
-            lines.append(f"{prefix:<4} {name:<22}: {cnt}")
-
-        # Top distances
-        lines.append("")
-        lines.append("📡 TOP 5 DISTANCES :")
-        lines.append("-" * 30)
-        for row in c.execute("SELECT callsign, qso_date, grid FROM qsos WHERE grid != '' ORDER BY CAST(distance AS INTEGER) DESC LIMIT 5"):
-            d, _ = calculate_dist_bearing(MY_GRID, row[2])
-            if d: lines.append(f"  {row[0]:<12} {row[1]}  {d} km")
-
-        self.txt_stats.insert(tk.END, "\n".join(lines))
-
-    def _copy_stats(self):
-        content = self.txt_stats.get("1.0", tk.END)
-        self.root.clipboard_clear()
-        self.root.clipboard_append(content)
-        self.status_var.set("📋 Rapport copié dans le presse-papier")
-
     def _check_duplicate(self, event=None):
         """Vérifie en temps réel si le callsign a déjà été travaillé."""
         call = self.e_call.get().strip().upper()
@@ -3412,7 +3359,7 @@ class StationMasterApp:
 
         graph_combo = ttk.Combobox(
             graph_control, textvariable=self.logbook_graph_var,
-            values=["Bandes", "Modes", "USA States", "Timeline", "Awards"],
+            values=["Bandes", "Modes", "Timeline", "Awards", "WAS détail"],
             state="readonly", width=15
         )
         graph_combo.pack(side="left", padx=5)
@@ -3499,6 +3446,39 @@ class StationMasterApp:
 
         self.status_var.set("✅ Logbook mis à jour")
 
+    def _draw_was_grid_table(self):
+        """Tableau État × Bande pour le suivi WAS, coloré par ligne selon le nb de bandes travaillées."""
+        grid = self._compute_was_grid()
+
+        cols = ["État"] + WAS_BANDS + ["Total"]
+        tree = ttk.Treeview(self.logbook_graph_frame, columns=cols, show="headings", height=25)
+        for col in cols:
+            tree.heading(col, text=col)
+            tree.column(col, width=130 if col == "État" else 55, anchor="center")
+
+        tree.tag_configure("complete", background="#1e5631", foreground="white")
+        tree.tag_configure("partial", background="#3a4a1e", foreground="white")
+        tree.tag_configure("weak", background="#11273f", foreground="#e8f0fe")
+
+        for code in sorted(US_STATES.keys()):
+            name = US_STATES[code]
+            counts = grid.get(code, {b: 0 for b in WAS_BANDS})
+            total = sum(counts.values())
+            bands_worked = sum(1 for v in counts.values() if v > 0)
+            if bands_worked >= 5:
+                tag = "complete"
+            elif bands_worked >= 2:
+                tag = "partial"
+            else:
+                tag = "weak"
+            row = [f"{name} ({code})"] + [counts[b] or "" for b in WAS_BANDS] + [total]
+            tree.insert("", "end", values=row, tags=(tag,))
+
+        sb = ttk.Scrollbar(self.logbook_graph_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        tree.pack(fill="both", expand=True)
+
     def _draw_logbook_graph(self):
         """Dessine le graphique sélectionné dans logbook_graph_frame."""
         if not getattr(self, '_prop_matplotlib_ok', False) and not getattr(self, '_matplotlib_ok', False):
@@ -3516,6 +3496,11 @@ class StationMasterApp:
 
             for w in self.logbook_graph_frame.winfo_children():
                 w.destroy()
+
+            if graph_type == "WAS détail":
+                self._draw_was_grid_table()
+                self.status_var.set("✅ Tableau 'WAS détail' généré")
+                return
 
             cursor = self.conn.cursor()
             fig = Figure(figsize=(6, 4), dpi=100, facecolor="#11273f")
@@ -3549,16 +3534,6 @@ class StationMasterApp:
                     at.set_fontsize(8)
                 ax.set_title("QSOs par mode", color="#00d4ff", fontsize=12, fontweight="bold")
 
-            elif graph_type == "USA States":
-                cursor.execute("""
-                    SELECT callsign FROM qsos
-                    WHERE callsign LIKE 'W%' OR callsign LIKE 'K%' OR callsign LIKE 'N%'
-                """)
-                usa_calls = len(cursor.fetchall())
-                ax.text(0.5, 0.5, f"USA: {usa_calls}\nQSOs", ha="center", va="center",
-                        fontsize=20, color="#00d4ff", fontweight="bold", transform=ax.transAxes)
-                ax.axis("off")
-
             elif graph_type == "Timeline":
                 cursor.execute("""
                     SELECT qso_date, COUNT(*) FROM qsos
@@ -3576,9 +3551,9 @@ class StationMasterApp:
                 ax.grid(True, alpha=0.2, color="#ffffff")
 
             elif graph_type == "Awards":
-                dxcc_n, waz_n, was_set = self._compute_award_stats()
+                dxcc_n, waz_n, was_n = self._compute_award_stats()
                 awards = ["DXCC", "WAZ", "WAS"]
-                counts = [dxcc_n, waz_n, len(was_set)]
+                counts = [dxcc_n, waz_n, was_n]
                 colors = ["#00d4ff", "#ff6b9d", "#4ecdc4"]
                 bars = ax.bar(awards, counts, color=colors, edgecolor="#ffffff")
                 ax.set_ylabel("Travaillés", color="#ffffff")
@@ -3635,18 +3610,7 @@ class StationMasterApp:
     # ==========================================
 
     # Zones WAZ (CQ zones) : calculées depuis cty.dat via get_cq_zone(), voir _compute_award_stats
-
-    # États USA pour WAS
-    USA_STATES = [
-        "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
-        "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
-        "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
-        "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada",
-        "New Hampshire","New Jersey","New Mexico","New York","North Carolina",
-        "North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island",
-        "South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont",
-        "Virginia","Washington","West Virginia","Wisconsin","Wyoming"
-    ]
+    # WAS : colonne state (voir US_STATES/WAS_BANDS), _compute_award_stats / _compute_was_grid
 
     # Mémoires fréquences par défaut
     DEFAULT_MEMORIES = [
@@ -6125,6 +6089,13 @@ class StationMasterApp:
             qsls  = qsl_val("QSL_SENT")
             if not lotw: lotw = 'No'
             if not eqsl: eqsl = g("APP_EQSL_QSL_RCVD") or 'No'
+            # État US (WAS) : champ STATE ADIF, avec fallback Alaska/Hawaii via COUNTRY
+            # (ces deux entités DXCC séparées ont souvent un STATE vide dans l'ADIF)
+            state = g("STATE").upper()
+            if not state:
+                country_field = g("COUNTRY").upper()
+                if country_field == "ALASKA": state = "AK"
+                elif country_field == "HAWAII": state = "HI"
             # Éviter les doublons (même call + date + heure + bande + mode)
             exists = cur.execute(
                 "SELECT 1 FROM qsos WHERE callsign=? AND qso_date=? AND time_on=? AND band=? AND mode=?",
@@ -6134,11 +6105,11 @@ class StationMasterApp:
                 continue
             cur.execute(
                 "INSERT INTO qsos (qso_date, time_on, callsign, band, mode, rst_sent, rst_rcvd, "
-                "name, qth, distance, grid, freq, qrz_stat, eqsl_stat, lotw_stat, club_stat, qsl_rcvd, qsl_sent, comment) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'Import',?,?,'Import',?,?,?)",
+                "name, qth, distance, grid, freq, qrz_stat, eqsl_stat, lotw_stat, club_stat, qsl_rcvd, qsl_sent, comment, state) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'Import',?,?,'Import',?,?,?,?)",
                 (df, tf, call, band, mode, g("RST_SENT"), g("RST_RCVD"),
                  g("NAME"), g("QTH"), "", g("GRIDSQUARE"), "",
-                 eqsl, lotw, qslr, qsls, g("COMMENT")))
+                 eqsl, lotw, qslr, qsls, g("COMMENT"), state))
             inserted += 1
         self.conn.commit()
         self.load_data()

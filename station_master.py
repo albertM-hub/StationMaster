@@ -1334,17 +1334,6 @@ class StationMasterApp:
         except Exception as _e:
             print(f"[SPEExpertTab] Import échoué : {_e}")
 
-        # --- Onglet FT8 Live Monitor ---
-        self._ft8_monitor = None
-        try:
-            from tab_ft8_monitor import FT8MonitorTab
-            t_ft8 = tk.Frame(self.nb, bg=BG)
-            self.nb.add(t_ft8, text="📡 FT8 Live")
-            self._ft8_monitor = FT8MonitorTab(t_ft8, app=self, my_call=MY_CALL,
-                                              get_country=get_country_name)
-            self.root.after(3000, self._ft8_monitor.load_recent_qsos)
-        except Exception as _e:
-            print(f"[FT8Monitor] Import échoué: {_e}")
 
         # --- Onglet Propagation ---
         t_prop = tk.Frame(self.nb, bg=BG); self.nb.add(t_prop, text="🌐 Propagation")

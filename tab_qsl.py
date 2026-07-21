@@ -367,7 +367,7 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
 
     draw.line([36, 356, W-36, 356], fill="#1e3a5a", width=2)
 
-    sta_cols = [("RIG", "FlexRadio 6500"), ("ANTENNA", qval("ant")),
+    sta_cols = [("RIG", "FlexRadio 6500"), ("ANTENNA", "Ultrabeam"),
                 ("POWER", "100W"), ("GRID", "JO20SP"),
                 ("QSL VIA", "Bureau / Direct / LoTW")]
     cw2 = (W - 72) // len(sta_cols)

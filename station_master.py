@@ -4555,14 +4555,19 @@ class StationMasterApp:
 
         c.create_line(18, 178, W-18, 178, fill="#1e3a5a", width=1)
 
+        # Largeurs proportionnelles au contenu (uniforme = "FlexRadio 6500"
+        # collé à la valeur suivante, 126px de texte pour 128px de colonne).
         sta_cols = [
-            ("RIG",     "FlexRadio 6500"), ("ANTENNA", qval("ant")),
-            ("POWER",   "100W"),           ("GRID",    "JO20SP"),
-            ("QSL VIA", "Bureau / Direct / LoTW"),
+            ("RIG",     "FlexRadio 6500",         150),
+            ("ANTENNA", "Ultrabeam",               110),
+            ("POWER",   "100W",                     70),
+            ("GRID",    "JO20SP",                   90),
+            ("QSL VIA", "Bureau / Direct / LoTW",  224),
         ]
-        col_w2 = (W - 36) // len(sta_cols)
-        for i, (lbl, val) in enumerate(sta_cols):
-            field(18 + i * col_w2, 186, lbl, val)
+        cx2 = 18
+        for lbl, val, col_w3 in sta_cols:
+            field(cx2, 186, lbl, val)
+            cx2 += col_w3
 
         c.create_line(18, 226, W-18, 226, fill="#1e3a5a", width=1)
         c.create_text(W//2, 238, anchor="n",

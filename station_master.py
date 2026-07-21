@@ -1465,6 +1465,16 @@ class StationMasterApp:
         from tab_grayline import TabGrayline
         TabGrayline(t_gray, app=self)
 
+        # --- Onglet Satellites ---
+        t_sat = tk.Frame(self.nb, bg=BG); self.nb.add(t_sat, text="🛰️ Satellites")
+        try:
+            from tab_satellites import TabSatellites
+            self._sat_tab = TabSatellites(t_sat, app=self, grid_to_latlon=grid_to_latlon)
+        except Exception as _e:
+            import traceback; traceback.print_exc()
+            tk.Label(t_sat, text=f"⚠️ tab_satellites.py introuvable : {_e}",
+                     fg="red", bg=BG).pack(expand=True)
+
         # --- Onglet DX Live ---
         from tab_dx_unified import TabDXUnified
         t_dx = tk.Frame(self.nb, bg=BG)

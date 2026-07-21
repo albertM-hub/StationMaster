@@ -13,6 +13,7 @@ import requests
 _DIR          = os.path.dirname(os.path.abspath(__file__))
 _TEMPLATE_JPG = os.path.join(_DIR, "QSL_ON5AM_print.jpg")
 _CONFIG_FILE  = os.path.join(_DIR, "config.ini")
+_WATERMARK_JPG = os.path.join(_DIR, "IMG_20210417_104402.jpg")
 
 # ── Positions pixel dans le template 1654×1063 (mesurées sur l'image) ────────
 _TEXT_X = {
@@ -254,6 +255,24 @@ def _load_font(size: int):
     return ImageFont.load_default()
 
 
+def _watermark_layer(w, h, opacity=0.45,
+                      tint_black="#040810", tint_white="#5a7ba0"):
+    """Photo perso désaturée + colorisée en dégradé navy, pour un fond discret.
+    La colorisation (plutôt qu'un simple assombrissement + overlay plat) est
+    nécessaire pour garder du contraste visible une fois l'opacité appliquée.
+    """
+    from PIL import Image, ImageOps
+
+    if not os.path.exists(_WATERMARK_JPG):
+        return None
+    photo = Image.open(_WATERMARK_JPG).convert("RGB")
+    photo = ImageOps.fit(photo, (w, h), method=Image.LANCZOS)
+    gray  = ImageOps.autocontrast(ImageOps.grayscale(photo), cutoff=1)
+    layer = ImageOps.colorize(gray, black=tint_black, white=tint_white).convert("RGBA")
+    layer.putalpha(int(255 * opacity))
+    return layer
+
+
 def _render_qsl_image(qso) -> "PIL.Image.Image":
     """Rend la carte QSL navy-blue en PIL Image (1360×840 px).
     Utilisé pour l'aperçu miniature ET la pièce jointe PDF.
@@ -278,7 +297,15 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
                 return ImageFont.truetype(fp, size)
         return ImageFont.load_default()
 
-    img  = Image.new("RGB", (W, H), "#0d1b2e")
+    img = Image.new("RGB", (W, H), "#0d1b2e")
+
+    # Watermark photo perso : collé avant tout tracé, uniquement dans la zone
+    # centrale (y=114–670) — le header/bande crème/pied sont peints en aplat
+    # opaque par-dessus juste après, donc le recouvrent naturellement.
+    wm = _watermark_layer(W, 670 - 114)
+    if wm is not None:
+        img.paste(wm, (0, 114), wm)
+
     draw = ImageDraw.Draw(img)
 
     def t(x, y, text, fill, size, bold=True, mono=False, anchor="la"):
@@ -300,7 +327,8 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
     t(W-16,  58, "hamanalyst.org",                         "#8899aa", 15, bold=False, anchor="rt")
 
     # ── 2. ZONE CENTRALE (y=114–670) ───────────────────────────────────
-    draw.rectangle([0, 114, W, 670], fill="#0d1b2e")
+    # (pas de rectangle de fond ici : effacerait le watermark collé plus haut ;
+    # le fond est déjà la couleur de base #0d1b2e ou la photo, au choix)
     t(36, 128, "CONFIRMING QSO WITH :", "#8899aa", 16, bold=False)
 
     dx_call    = str(qso.get("call",    "") or "——") if qso else "——"

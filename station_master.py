@@ -4490,6 +4490,18 @@ class StationMasterApp:
 
         # ── 2. ZONE CENTRALE (y=57–335) ────────────────────────────────────
         c.create_rectangle(0, 57, W, 335, fill=MID, outline="")
+        if _PIL_OK:
+            try:
+                from tab_qsl import _watermark_layer
+                zone_w, zone_h = W, 335 - 57
+                wm = _watermark_layer(zone_w, zone_h)
+                if wm is not None:
+                    bg = Image.new("RGB", (zone_w, zone_h), MID)
+                    bg.paste(wm, (0, 0), wm)
+                    self._qsl_card_bg_img = ImageTk.PhotoImage(bg)
+                    c.create_image(0, 57, anchor="nw", image=self._qsl_card_bg_img)
+            except Exception:
+                pass
         c.create_text(18, 64, text="CONFIRMING QSO WITH :", anchor="nw",
                       fill=LGRAY, font=("Arial", 8))
 

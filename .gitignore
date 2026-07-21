@@ -8,6 +8,7 @@ mon_logbook.db
 *.db-wal
 *.adi
 *.adif
+*.csv
 
 # Données téléchargées automatiquement au runtime
 cty.dat

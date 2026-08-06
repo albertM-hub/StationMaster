@@ -27,11 +27,42 @@ séparés, aucune logique métier ajoutée à `station_master.py`.
   l'implémentation mais sans précédent technique dans le repo.
 - Pas de device audio virtuel configuré, pas de lib audio dans `requirements.txt`
   (seul `numpy` est présent).
-- Port TCI d'AetherSDR : **5001** (indiqué par l'utilisateur, non garanti — à
-  confirmer en implémentation, donc rendu configurable plutôt que codé en dur).
+- Port TCI d'AetherSDR : **50001**, confirmé en test réel (handshake complet
+  obtenu : `device:AetherSDR;`, `protocol:ExpertSDR3,1.5;`).
 
 **Conséquence** : le client TCI est un sous-système entièrement à écrire, pas un
 branchement sur un flux déjà en place.
+
+## Mise à jour post-Étape 0 — pivot audio : DAX (PipeWire) au lieu de TCI binaire
+
+Test réel effectué le 2026-08-06 : la connexion TCI (`ws://127.0.0.1:50001`)
+fonctionne et livre un flux **texte** complet et exploitable en continu sans
+commande d'abonnement (fréquence, S-meter, mode, tous les paramètres du VFO —
+utile pour le bandeau haut de l'onglet et les métadonnées de galerie). En
+revanche, **aucune trame audio binaire n'est jamais reçue** via ce canal, avec
+ou sans commande `audio_stream:0,true;` (aucun ack, aucune trame) — le format
+audio binaire de TCI reste non confirmé sur ce déploiement AetherSDR.
+
+Découverte en cours de test : AetherSDR expose une fonctionnalité **DAX**
+(Digital Audio eXchange, même principe que le DAX de SmartSDR/FlexRadio) qui
+crée de vrais devices **PipeWire** sur la machine Linux :
+- `aethersdr-dax-1` à `aethersdr-dax-4` (sources RX, float32 mono 48 kHz — DAX 1
+  correspond à la Slice A active, confirmé par capture réelle : signal non nul,
+  RMS ≈ 0.007).
+- `aethersdr-tx` (sink TX, s16 mono 24 kHz) + `aethersdr-tx.monitor`.
+
+**Décision** : l'audio RX/TX passe par ces devices DAX via `sounddevice`
+(paquet système `python3-sounddevice`, installé via `apt` — pas `pip`, cet
+environnement Ubuntu est en "externally-managed", `pip install` y échoue sans
+`--break-system-packages`). TCI est conservé mais uniquement pour le **contrôle
+et le statut** (fréquence affichée, S-meter, mode) — pas pour l'audio.
+
+Piège technique rencontré : l'API bloquante `sounddevice.rec()`/`.wait()` reste
+bloquée indéfiniment sur ces devices DAX dans cet environnement — utiliser
+systématiquement l'API par callback (`sd.InputStream`/`sd.OutputStream`).
+Autre piège : l'index PortAudio d'un device DAX **change d'une exécution à
+l'autre** (observé : `aethersdr-dax-1` à l'index 1 puis à l'index 19) — toujours
+résoudre le device par son **nom**, jamais par un index codé en dur.
 
 ## Choix techniques
 
@@ -42,14 +73,23 @@ branchement sur un flux déjà en place.
   plutôt que de mélanger un encodeur tiers et un décodeur maison. Seule dépendance
   déjà présente (`numpy`) suffit.
 - Port TCI configurable via une nouvelle section `[TCI]` dans `config.ini`, défaut
-  `5001`.
+  `50001`.
+- Nom du device DAX RX configurable (défaut `aethersdr-dax-1`, correspond à la
+  Slice A active) plutôt que codé en dur, au cas où l'utilisateur change de slice.
 
 ## Fichiers et responsabilités
 
-- `tci_client.py` — client TCI générique (WebSocket, spec publique Expert
-  Electronics). Thread dédié. RX : file `queue.Queue` de blocs PCM (numpy arrays).
-  TX : méthode `send_audio(samples)`. Aucune dépendance Tkinter — testable en
-  standalone (script CLI, dump vers WAV).
+- `tci_client.py` — client TCI (WebSocket, protocole `ExpertSDR3,1.5` confirmé
+  en test réel sur port 50001). Thread dédié avec boucle asyncio privée
+  (lib `websockets`, déjà présente via apt). Utilisé uniquement pour le
+  **contrôle/statut** : fréquence, S-meter, mode — flux texte automatique dès
+  la connexion, aucune commande d'abonnement nécessaire. Aucune dépendance
+  Tkinter — testable en standalone (`python3 tci_client.py`).
+- `dax_audio.py` — capture/lecture audio via les devices PipeWire DAX
+  d'AetherSDR (`sounddevice`, API callback obligatoire). `DAXAudioRX` pousse des
+  blocs float32 mono 48 kHz dans une `queue.Queue` (device résolu par nom, ex.
+  `aethersdr-dax-1`). `DAXAudioTX` lit un tableau de samples vers `aethersdr-tx`.
+  Aucune dépendance Tkinter — testable en standalone.
 - `sstv_decoder.py` — pur signal processing : détection VIS (corrélation/Goertzel
   sur tons de calibration 1200/1300 Hz), décodeurs ligne par ligne par mode
   (Scottie 1/2, Martin 1/2, Robot 36), détection FSK ID. Entrée : blocs audio.
@@ -65,13 +105,16 @@ branchement sur un flux déjà en place.
 
 ## Chaîne RX
 
-- Connexion TCI établie à l'ouverture de l'onglet (pas au démarrage de l'app). Échec
-  de connexion → message clair dans l'onglet + bouton "Reconnecter", pas de retry
-  agressif.
+- Connexions TCI (contrôle/statut) et DAX (audio, `DAXAudioRX`) établies à
+  l'ouverture de l'onglet (pas au démarrage de l'app). Échec de connexion →
+  message clair dans l'onglet + bouton "Reconnecter", pas de retry agressif.
+  Les deux sont indépendantes : un échec TCI n'empêche pas l'audio DAX de
+  fonctionner (juste pas d'affichage fréquence/S-meter en direct).
 - Garde Decodium : avant "Arm", vérifie si Decodium tourne (port UDP déjà occupé, ou
   process check) → avertissement bloquant si actif (usage exclusif, jamais
   simultané).
-- "Arm" démarre un thread daemon consommant la queue audio TCI en continu.
+- "Arm" démarre `DAXAudioRX`, dont le thread callback `sounddevice` alimente en
+  continu une `queue.Queue` de blocs audio consommée côté UI.
 - Waterfall : FFT glissante (numpy `rfft`, fenêtres ~50ms) → colormap spectrogramme
   → rendu via `self._tk_queue` (cohérent avec le pattern déjà utilisé pour
   CAT/cluster/solar).
@@ -90,9 +133,10 @@ branchement sur un flux déjà en place.
 - "Choose image..." (`filedialog`, drop optionnel si simple à intégrer) →
   recadrage cover-crop `PIL` à la résolution du mode choisi.
 - `sstv_encoder.encode(image, mode)` → tableau de samples.
-- PTT : `set_tx(True)` → pause ~200ms → `tci_client.send_audio()` en streaming par
-  blocs → `set_tx(False)` **dans un `finally`** pour garantir la coupure même en cas
-  d'erreur pendant l'envoi (point sensible identifié explicitement).
+- PTT : `set_tx(True)` (`app.flex_client`, via rigctld) → pause ~200ms →
+  `DAXAudioTX.play(samples)` vers `aethersdr-tx` → `set_tx(False)` **dans un
+  `finally`** pour garantir la coupure même en cas d'erreur pendant l'envoi (point
+  sensible identifié explicitement).
 - "Stop" interrompt la boucle d'envoi et force le passage au `finally` de coupure
   PTT immédiatement.
 - Indicateur "TX On"/"TX Off" reflète l'état réel retourné par `set_tx()`, pas
@@ -121,8 +165,9 @@ branchement sur un flux déjà en place.
 
 ## Plan de livraison phasé
 
-1. **TCI client isolé** — script CLI testant `tci_client.py` seul (connexion port
-   5001, dump audio reçu vers WAV).
+1. **TCI client + DAX audio isolés** — ✅ fait (2026-08-06) : `tci_client.py`
+   validé en conditions réelles (handshake `ExpertSDR3,1.5`, flux texte continu) ;
+   `dax_audio.py` validé (capture réelle non nulle sur `aethersdr-dax-1`).
 2. **Décodeur hors-ligne** — `sstv_decoder.py` testé sur fichiers WAV connus, un par
    mode, sans TCI ni Tkinter.
 3. **RX live minimal** — `tab_sstv.py` avec waterfall + Arm + décodage live, sans

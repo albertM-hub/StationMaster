@@ -2,7 +2,7 @@
 tab_sstv.py — Onglet SSTV (réception) pour Station Master (ON5AM).
 
 Phase 1 (RX) uniquement — voir docs/plans/2026-08-06-sstv-tab-design.md.
-Émission (TX) et galerie viennent dans une étape ultérieure.
+Émission (TX) vient dans une étape ultérieure.
 
 Architecture :
 - `tci_client.TCIClient` (contrôle/statut uniquement — fréquence, S-meter).
@@ -19,10 +19,12 @@ Une fois verrouillé, l'audio s'accumule dans un buffer dédié à l'image en
 cours, réinitialisé à la fin de la réception.
 """
 
+import os
 import subprocess
 import threading
 import time
 import tkinter as tk
+from datetime import datetime
 from tkinter import messagebox, ttk
 
 import numpy as np
@@ -32,11 +34,16 @@ import dax_audio
 import sstv_decoder as sstvdec
 import tci_client
 
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(_APP_DIR, "sstv_images")
+
 BG = "#0d1526"
 PANEL_BG = "#152238"
 FG = "#e8eef7"
 ACCENT = "#4a9eff"
 BORDER = "#2a3b5c"
+ROW_BG = "#1b2c47"
+ROW_BG_ALT = "#152238"
 
 WATERFALL_HEIGHT = 220
 WATERFALL_WIDTH = 640
@@ -80,12 +87,36 @@ class TabSSTV:
         self._lines_done = 0
         self._last_vis_search = 0.0
         self._last_decode = 0.0
+        self._last_freq_hz = None
 
         self.tci = tci_client.TCIClient(*self._tci_host_port())
         self.tci.start()
 
+        self._init_db()
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+
         self._build_ui()
+        self._load_gallery()
         self.parent.after(500, self._poll_tci_status)
+
+    # ------------------------------------------------------------------
+    # Base de données (table dédiée, créée depuis ce module — pas dans
+    # station_master.py — sur la connexion SQLite partagée de l'appli)
+    # ------------------------------------------------------------------
+    def _init_db(self):
+        try:
+            self.app.conn.cursor().execute("""CREATE TABLE IF NOT EXISTS sstv_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    callsign TEXT,
+                    mode TEXT,
+                    freq_hz INTEGER,
+                    image_path TEXT NOT NULL,
+                    direction TEXT NOT NULL DEFAULT 'rx'
+                )""")
+            self.app.conn.commit()
+        except Exception as e:
+            print(f"[SSTV] Création table sstv_images échouée : {e}")
 
     # ------------------------------------------------------------------
     def _tci_host_port(self):
@@ -184,7 +215,9 @@ class TabSSTV:
 
         # Zone bas : sélecteur de mode + image en cours de décodage
         bottom = tk.Frame(self.parent, bg=PANEL_BG)
-        bottom.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        bottom.pack(fill="x", padx=8, pady=(4, 4))
+        bottom.pack_propagate(False)
+        bottom.configure(height=220)
 
         left = tk.Frame(bottom, bg=PANEL_BG)
         left.pack(side="left", fill="y", padx=8, pady=8)
@@ -225,6 +258,51 @@ class TabSSTV:
         self.image_label = tk.Label(right, bg="black")
         self.image_label.pack(fill="both", expand=True)
 
+        self._build_gallery_ui()
+
+    def _build_gallery_ui(self):
+        gallery_outer = tk.Frame(self.parent, bg=PANEL_BG)
+        gallery_outer.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        tk.Label(
+            gallery_outer,
+            text="Galerie",
+            bg=PANEL_BG,
+            fg=FG,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", padx=8, pady=(6, 2))
+
+        canvas_frame = tk.Frame(gallery_outer, bg=PANEL_BG)
+        canvas_frame.pack(fill="both", expand=True, padx=4, pady=(0, 4))
+
+        self._gallery_canvas = tk.Canvas(
+            canvas_frame, bg=PANEL_BG, highlightthickness=0
+        )
+        scrollbar = ttk.Scrollbar(
+            canvas_frame, orient="vertical", command=self._gallery_canvas.yview
+        )
+        self._gallery_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        self._gallery_canvas.pack(side="left", fill="both", expand=True)
+
+        self._gallery_list = tk.Frame(self._gallery_canvas, bg=PANEL_BG)
+        self._gallery_window = self._gallery_canvas.create_window(
+            (0, 0), window=self._gallery_list, anchor="nw"
+        )
+        self._gallery_list.bind(
+            "<Configure>",
+            lambda e: self._gallery_canvas.configure(
+                scrollregion=self._gallery_canvas.bbox("all")
+            ),
+        )
+        self._gallery_canvas.bind(
+            "<Configure>",
+            lambda e: self._gallery_canvas.itemconfig(
+                self._gallery_window, width=e.width
+            ),
+        )
+        self._gallery_thumb_refs = []  # évite le garbage collection des PhotoImage
+
     # ------------------------------------------------------------------
     # Statut TCI (contrôle/statut uniquement — pas l'audio)
     # ------------------------------------------------------------------
@@ -247,6 +325,7 @@ class TabSSTV:
                     try:
                         hz = int(line.split(",")[2].rstrip(";"))
                         self.freq_var.set(f"{hz/1000:.3f} kHz")
+                        self._last_freq_hz = hz
                     except Exception:
                         pass
         except Exception:
@@ -366,23 +445,67 @@ class TabSSTV:
             self._lines_done = max(self._lines_done, y + 1)
             self.app._tk_queue.put(lambda img=image.copy(): self._show_image(img))
 
+        image = None
         if vis_code in sstvdec.MODES:
             mode = sstvdec.MODES[vis_code]
-            sstvdec.decode_generic_mode(
+            image = sstvdec.decode_generic_mode(
                 self._image_buffer, mode, slant=slant, on_line=on_line
             )
             total = mode.height
+            mode_name = mode.name
         elif vis_code == sstvdec.ROBOT36_VIS:
-            sstvdec.decode_robot36(self._image_buffer, slant=slant, on_line=on_line)
+            image = sstvdec.decode_robot36(
+                self._image_buffer, slant=slant, on_line=on_line
+            )
             total = sstvdec.ROBOT36_HEIGHT
+            mode_name = "Robot 36"
         else:
             total = None
+            mode_name = None
 
         if total is not None and self._lines_done >= total:
             self.app._tk_queue.put(lambda: self.status_var.set("Réception terminée"))
+            self._save_reception(image, mode_name)
             self._image_buffer = None
             self._vis_code = None
             self._lines_done = 0
+
+    def _save_reception(self, image, mode_name):
+        """Sauvegarde auto de l'image reçue (fichier + entrée galerie)."""
+        if image is None:
+            return
+        ts = datetime.now()
+        safe_mode = (mode_name or "inconnu").replace(" ", "")
+        fname = f"{ts.strftime('%Y%m%d_%H%M%S')}_{safe_mode}.png"
+        path = os.path.join(IMAGES_DIR, fname)
+        try:
+            Image.fromarray(image).save(path)
+        except Exception as e:
+            print(f"[SSTV] Sauvegarde image échouée : {e}")
+            return
+
+        # FSK ID (indicatif) : non implémenté en Phase 1, voir sstv_decoder.detect_fsk_id
+        callsign = sstvdec.detect_fsk_id(self._image_buffer)
+
+        try:
+            self.app.conn.execute(
+                "INSERT INTO sstv_images (timestamp, callsign, mode, freq_hz, image_path, direction) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    ts.isoformat(timespec="seconds"),
+                    callsign,
+                    mode_name,
+                    self._last_freq_hz,
+                    path,
+                    "rx",
+                ),
+            )
+            self.app.conn.commit()
+        except Exception as e:
+            print(f"[SSTV] Enregistrement DB échoué : {e}")
+            return
+
+        self.app._tk_queue.put(self._load_gallery)
 
     def _update_waterfall(self, block):
         n = len(block)
@@ -422,3 +545,69 @@ class TabSSTV:
         img_disp.thumbnail((max(w, 100), max(h, 100)))
         self._img_photo = ImageTk.PhotoImage(img_disp)
         self.image_label.config(image=self._img_photo)
+
+    # ------------------------------------------------------------------
+    # Galerie
+    # ------------------------------------------------------------------
+    def _load_gallery(self):
+        for child in self._gallery_list.winfo_children():
+            child.destroy()
+        self._gallery_thumb_refs = []
+
+        try:
+            rows = (
+                self.app.conn.cursor()
+                .execute(
+                    "SELECT timestamp, callsign, mode, freq_hz, image_path "
+                    "FROM sstv_images ORDER BY timestamp DESC"
+                )
+                .fetchall()
+            )
+        except Exception as e:
+            print(f"[SSTV] Lecture galerie échouée : {e}")
+            return
+
+        for i, (ts, callsign, mode, freq_hz, path) in enumerate(rows):
+            self._add_gallery_row(i, ts, callsign, mode, freq_hz, path)
+
+    def _add_gallery_row(self, index, ts, callsign, mode, freq_hz, path):
+        row_bg = ROW_BG if index % 2 == 0 else ROW_BG_ALT
+        row = tk.Frame(self._gallery_list, bg=row_bg)
+        row.pack(fill="x", pady=1)
+
+        thumb_label = tk.Label(row, bg=row_bg)
+        thumb_label.pack(side="left", padx=6, pady=4)
+        try:
+            with Image.open(path) as im:
+                thumb = im.copy()
+            thumb.thumbnail((64, 64))
+            photo = ImageTk.PhotoImage(thumb)
+            thumb_label.config(image=photo)
+            self._gallery_thumb_refs.append(photo)
+        except Exception:
+            thumb_label.config(text="—", fg=FG, width=8, height=4)
+
+        freq_txt = f"{freq_hz/1000:.3f} kHz" if freq_hz else "fréquence inconnue"
+        call_txt = callsign or "indicatif inconnu"
+        info_txt = f"{ts}   {mode or '?'}   {freq_txt}   {call_txt}"
+        info_label = tk.Label(
+            row, text=info_txt, bg=row_bg, fg=FG, font=("Segoe UI", 9), anchor="w"
+        )
+        info_label.pack(side="left", fill="x", expand=True, padx=6)
+
+        for widget in (row, thumb_label, info_label):
+            widget.bind("<Double-Button-1>", lambda e, p=path: self._open_full_image(p))
+
+    def _open_full_image(self, path):
+        try:
+            img = Image.open(path)
+        except Exception as e:
+            messagebox.showerror("SSTV", f"Impossible d'ouvrir l'image :\n{e}")
+            return
+        win = tk.Toplevel(self.parent)
+        win.title(os.path.basename(path))
+        win.configure(bg="black")
+        photo = ImageTk.PhotoImage(img)
+        label = tk.Label(win, image=photo, bg="black")
+        label.image = photo  # évite le garbage collection
+        label.pack()

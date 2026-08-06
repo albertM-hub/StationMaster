@@ -178,7 +178,13 @@ résoudre le device par son **nom**, jamais par un index codé en dur.
    valider contre une vraie capture SSTV hors-air à l'Étape 3.
 3. **RX live minimal** — `tab_sstv.py` avec waterfall + Arm + décodage live, sans
    galerie ni TX. Test réel sur un signal SSTV connu.
-4. **Galerie** — table `sstv_images` + sauvegarde auto + vue galerie.
+4. **Galerie** — ✅ fait (2026-08-06) : table `sstv_images` créée depuis
+   `tab_sstv.py` sur la connexion SQLite partagée (`app.conn`), sauvegarde auto
+   en fin de réception (fichier PNG dans `sstv_images/`, gitignoré comme les
+   autres données personnelles + entrée DB), vue galerie (miniatures + date/
+   mode/fréquence/indicatif, double-clic → image en taille réelle dans une
+   fenêtre séparée). Le champ indicatif reste vide tant que
+   `detect_fsk_id()` n'est pas implémenté (toujours `None`, Phase 1).
 5. **Encodeur isolé** — `sstv_encoder.py` testé en aller-retour encode→decode via le
    décodeur de l'étape 2, avant de toucher au TX live.
 6. **TX live** — Send/Stop, PTT réel, vérification stricte du `finally` de coupure.

@@ -9,6 +9,7 @@ mon_logbook.db
 *.adi
 *.adif
 *.csv
+sstv_images/
 
 # Données téléchargées automatiquement au runtime
 cty.dat

@@ -168,8 +168,14 @@ résoudre le device par son **nom**, jamais par un index codé en dur.
 1. **TCI client + DAX audio isolés** — ✅ fait (2026-08-06) : `tci_client.py`
    validé en conditions réelles (handshake `ExpertSDR3,1.5`, flux texte continu) ;
    `dax_audio.py` validé (capture réelle non nulle sur `aethersdr-dax-1`).
-2. **Décodeur hors-ligne** — `sstv_decoder.py` testé sur fichiers WAV connus, un par
-   mode, sans TCI ni Tkinter.
+2. **Décodeur hors-ligne** — ✅ fait (2026-08-06) : `sstv_decoder.py` (VIS +
+   Scottie 1/2, Martin 1/2, Robot 36), validé par test aller-retour synthétique
+   (encodeur de test jetable, hors repo) : VIS détecté correctement sur les 5
+   modes, 100% des lignes décodées, erreur moyenne <2/255 pour Scottie/Martin,
+   ~4/255 pour Robot 36 (attendu, approximation de chrominance documentée en
+   tête de fichier). Aucun faux positif de détection VIS sur un enregistrement
+   réel de bruit ambiant (aethersdr-dax-1, pas de transmission active). Reste à
+   valider contre une vraie capture SSTV hors-air à l'Étape 3.
 3. **RX live minimal** — `tab_sstv.py` avec waterfall + Arm + décodage live, sans
    galerie ni TX. Test réel sur un signal SSTV connu.
 4. **Galerie** — table `sstv_images` + sauvegarde auto + vue galerie.

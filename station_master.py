@@ -4566,6 +4566,26 @@ class StationMasterApp:
 
         ttk.Separator(left).pack(fill="x", pady=10)
 
+        # Synthèse en clair (texte généré à partir des mêmes données que les
+        # jauges/tableau ci-dessus — pas de fetch réseau supplémentaire)
+        ttk.Label(
+            left,
+            text="💬 LA PROPAGATION AUJOURD'HUI, EN CLAIR",
+            font=("Consolas", 12, "bold"),
+            foreground="#e8b84a",
+        ).pack(anchor="w")
+        self.prop_insight_var = tk.StringVar(value="Récupération des données...")
+        ttk.Label(
+            left,
+            textvariable=self.prop_insight_var,
+            font=("Consolas", 10),
+            foreground="#e8e8e8",
+            wraplength=300,
+            justify="left",
+        ).pack(anchor="w", pady=5)
+
+        ttk.Separator(left).pack(fill="x", pady=10)
+
         # Tableau des bandes (conditions)
         ttk.Label(
             left,
@@ -4791,6 +4811,86 @@ class StationMasterApp:
         except:
             return "--"
 
+    def _build_propagation_insight_text(self, data, band_data, vhf_data):
+        """Synthèse en clair (français) des conditions du jour pour MY_GRID,
+        générée à partir des mêmes données déjà récupérées pour les jauges et
+        le tableau par bande (pas de fetch réseau supplémentaire). Le
+        découpage jour/nuit réutilise get_day_night_status(), la même
+        convention déjà utilisée pour le greyline juste au-dessus."""
+        try:
+            k = float(data.get("K-index", ""))
+        except (TypeError, ValueError):
+            k = None
+        try:
+            sfi = float(data.get("SFI", ""))
+        except (TypeError, ValueError):
+            sfi = None
+
+        phrases = []
+
+        if k is not None:
+            if k <= 2:
+                phrases.append(
+                    f"Activité géomagnétique calme (K={k:.0f}) : propagation stable, pas de dégradation attendue."
+                )
+            elif k <= 4:
+                phrases.append(
+                    f"Activité géomagnétique modérée (K={k:.0f}) : conditions un peu instables, surtout sur les bandes hautes."
+                )
+            else:
+                phrases.append(
+                    f"Activité géomagnétique perturbée (K={k:.0f}) : tempête possible, HF dégradé aux hautes latitudes."
+                )
+
+        if sfi is not None:
+            if sfi < 90:
+                phrases.append(
+                    f"Flux solaire bas (SFI {sfi:.0f}) : ionisation limitée, privilégie les bandes basses."
+                )
+            elif sfi < 150:
+                phrases.append(
+                    f"Flux solaire correct (SFI {sfi:.0f}) : conditions HF classiques de milieu de cycle."
+                )
+            else:
+                phrases.append(
+                    f"Flux solaire élevé (SFI {sfi:.0f}) : bonnes chances d'ouverture sur les bandes hautes (10-15m)."
+                )
+
+        period = "night" if "NUIT" in get_day_night_status() else "day"
+        period_label = "cette nuit" if period == "night" else "en journée"
+        good_bands = [
+            name.split(" (")[0]
+            for name, val in band_data.items()
+            if f"({period})" in name and val.strip().lower() == "good"
+        ]
+        poor_bands = [
+            name.split(" (")[0]
+            for name, val in band_data.items()
+            if f"({period})" in name and val.strip().lower() == "poor"
+        ]
+        if good_bands:
+            phrases.append(
+                f"À privilégier {period_label} à {MY_GRID} : {', '.join(good_bands)}."
+            )
+        if poor_bands:
+            phrases.append(f"À éviter {period_label} : {', '.join(poor_bands)}.")
+
+        es_europe = vhf_data.get("E-Skip (europe)", "")
+        es_6m = vhf_data.get("E-Skip (europe_6m)", "")
+        aurora_nh = vhf_data.get("vhf-aurora (northern_hemi)", "")
+        if "open" in es_europe.lower() or "open" in es_6m.lower():
+            phrases.append(
+                "Sporadique E ouvert sur l'Europe — surveille le 6m/4m, une ouverture VHF est possible."
+            )
+        if "open" in aurora_nh.lower():
+            phrases.append(
+                "Aurore active dans l'hémisphère nord — propagation par aurore possible en VHF, mais HF dégradé aux hautes latitudes."
+            )
+
+        if not phrases:
+            return "Données de propagation en cours de récupération..."
+        return " ".join(phrases)
+
     def _update_prop_ui(self, data, band_data, vhf_data):
         """Met à jour tous les labels de propagation."""
         color_map = {
@@ -4828,6 +4928,11 @@ class StationMasterApp:
             f"    Bandes favorables: 160m, 80m, 40m"
         )
         self.prop_greyline_var.set(gl_text)
+
+        # Synthèse en clair
+        self.prop_insight_var.set(
+            self._build_propagation_insight_text(data, band_data, vhf_data)
+        )
 
         # Conditions par bande
         for w in self.band_cond_frame.winfo_children():

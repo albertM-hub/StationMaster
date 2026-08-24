@@ -478,7 +478,6 @@ def load_config_safe():
             "smtp_host": "smtp.gmail.com",
             "smtp_port": "587",
         },
-        "TCI": {"Host": "127.0.0.1", "Port": "50001"},
     }
     try:
         if not os.path.exists(CONFIG_FILE):
@@ -2368,21 +2367,6 @@ class StationMasterApp:
             traceback.print_exc()
             tk.Label(
                 t_sat, text=f"⚠️ tab_satellites.py introuvable : {_e}", fg="red", bg=BG
-            ).pack(expand=True)
-
-        # --- Onglet SSTV ---
-        t_sstv = tk.Frame(self.nb, bg=BG)
-        self.nb.add(t_sstv, text="🖼️ SSTV")
-        try:
-            from tab_sstv import TabSSTV
-
-            self._sstv_tab = TabSSTV(t_sstv, app=self)
-        except Exception as _e:
-            import traceback
-
-            traceback.print_exc()
-            tk.Label(
-                t_sstv, text=f"⚠️ tab_sstv.py introuvable : {_e}", fg="red", bg=BG
             ).pack(expand=True)
 
         # --- Onglet DX Live ---

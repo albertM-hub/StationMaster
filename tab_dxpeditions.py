@@ -388,6 +388,7 @@ class TabDXpeditions(tk.Frame):
         self._queue = queue.Queue()
         self._expeditions = []
         self._spots = []
+        self._dxsummit_down_until = None
 
         self._build_ui()
         self._poll_queue()
@@ -809,6 +810,7 @@ class TabDXpeditions(tk.Frame):
 
     def _fetch_spots(self):
         hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        dxwatch_failed = False
         try:
             r = _get_with_retry(
                 "https://www.dxwatch.com/dxsd1/s.php?s=0&r=200",
@@ -820,17 +822,29 @@ class TabDXpeditions(tk.Frame):
                 self._queue.put(("spots", spots))
                 return
         except Exception as e:
+            dxwatch_failed = True
             self._queue.put(("status", f"⚠ DXwatch : {e}", RED))
 
-        # Fallback DX Summit
+        # Fallback DX Summit — coupe-circuit : www.dxsummit.fi peut devenir
+        # injoignable au niveau réseau (pas juste lent, vérifié : timeout TCP pur)
+        # pendant de longues périodes. Sans ça, chaque cycle de 60s où DXwatch ne
+        # remonte aucun spot pour les DXpéditions suivies retente DX Summit,
+        # attend le timeout complet et réaffiche l'erreur en boucle.
+        now = time.monotonic()
+        if self._dxsummit_down_until and now < self._dxsummit_down_until:
+            if not dxwatch_failed:
+                self._queue.put(("spots", []))
+            return
         try:
             r = _get_with_retry(
                 "https://www.dxsummit.fi/DxSpots.aspx?count=200&format=json",
                 headers=hdrs,
             )
             r.raise_for_status()
+            self._dxsummit_down_until = None
             self._queue.put(("spots", self._parse_dxsummit(r.json())))
         except Exception as e:
+            self._dxsummit_down_until = now + 600
             self._queue.put(("status", f"⚠ Spots indisponibles : {e}", RED))
 
     def _parse_dxwatch(self, data: dict) -> list:

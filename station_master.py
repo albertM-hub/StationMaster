@@ -410,9 +410,21 @@ WAS_BANDS = [
 
 
 def get_continent(callsign):
-    """Retourne le continent (EU/AS/NA/SA/OC/AF) d'un indicatif."""
+    """Retourne le continent (EU/AS/NA/SA/OC/AF) d'un indicatif via cty.dat.
+
+    CONTINENT_PREFIXES ne sert plus que de repli pour les indicatifs que
+    cty.dat ne résout pas (cf. get_country_name) — table très incomplète,
+    ne pas s'y fier comme source principale (voir CLAUDE.md : ne pas
+    réintroduire de table de préfixes codée en dur comme source primaire).
+    """
     if not callsign:
         return "?"
+    if not _cty_loaded:
+        _load_cty()
+    country = get_country_name(callsign)
+    cont = _cty_country_continent.get(country)
+    if cont:
+        return cont
     c = callsign.upper().split("/")[0]
     for i in range(4, 0, -1):
         pfx = c[:i]
@@ -523,6 +535,7 @@ _cty_exact = {}  # exact callsign -> country name
 _cty_country_zone = {}  # country name -> zone CQ par défaut
 _cty_prefix_zone = {}  # prefix -> zone CQ (override spécifique)
 _cty_exact_zone = {}  # indicatif exact -> zone CQ (override spécifique)
+_cty_country_continent = {}  # country name -> continent (EU/AS/NA/SA/OC/AF)
 _cty_loaded = False
 
 
@@ -543,18 +556,19 @@ def _download_cty():
 
 
 def _parse_cty(path):
-    """Parse cty.dat et retourne (prefixes, exact, country_zone, prefix_zone, exact_zone)."""
+    """Parse cty.dat et retourne (prefixes, exact, country_zone, prefix_zone, exact_zone, country_continent)."""
     prefixes = {}
     exact = {}
     country_zone = {}
     prefix_zone = {}
     exact_zone = {}
+    country_continent = {}
     try:
         with open(path, encoding="utf-8", errors="ignore") as f:
             text = f.read()
     except Exception as e:
         print(f"[cty.dat] Lecture échouée : {e}")
-        return prefixes, exact, country_zone, prefix_zone, exact_zone
+        return prefixes, exact, country_zone, prefix_zone, exact_zone, country_continent
 
     # Chaque entrée se termine par ';'
     for record in text.split(";"):
@@ -581,6 +595,9 @@ def _parse_cty(path):
         default_zone = parts[1].strip()
         if default_zone:
             country_zone[country] = default_zone
+        continent = parts[3].strip()
+        if continent:
+            country_continent[country] = continent
 
         # Tous les alias (préfixes) de l'entrée
         alias_text = " ".join(alias_lines)
@@ -611,12 +628,12 @@ def _parse_cty(path):
                     prefix_zone[pfx_u] = zone_override
 
     print(f"[cty.dat] Parsé : {len(prefixes)} préfixes, {len(exact)} indicatifs exacts")
-    return prefixes, exact, country_zone, prefix_zone, exact_zone
+    return prefixes, exact, country_zone, prefix_zone, exact_zone, country_continent
 
 
 def _load_cty():
     """Charge cty.dat (télécharge si absent)."""
-    global _cty_prefixes, _cty_exact, _cty_country_zone, _cty_prefix_zone, _cty_exact_zone, _cty_loaded
+    global _cty_prefixes, _cty_exact, _cty_country_zone, _cty_prefix_zone, _cty_exact_zone, _cty_country_continent, _cty_loaded
     if _cty_loaded:
         return
     if not os.path.exists(CTY_FILE):
@@ -628,6 +645,7 @@ def _load_cty():
             _cty_country_zone,
             _cty_prefix_zone,
             _cty_exact_zone,
+            _cty_country_continent,
         ) = _parse_cty(CTY_FILE)
     _cty_loaded = True
 
@@ -751,7 +769,9 @@ def freq_to_band(freq_str):
     try:
         f = float(freq_str)
         if f > 100000:
-            f = f / 1000000
+            f = f / 1000000  # Hz (CAT/FlexRadio) -> MHz
+        elif f > 1000:
+            f = f / 1000  # kHz (DX Cluster/DXHeat) -> MHz
         if 1.8 <= f <= 2.0:
             return "160m"
         if 3.5 <= f <= 4.0:

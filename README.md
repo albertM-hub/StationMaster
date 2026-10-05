@@ -96,6 +96,8 @@ cp config.ini.example config.ini
 
 > `config.ini` contient vos mots de passe et clés : il est exclu du dépôt par `.gitignore`, ne le publiez jamais.
 
+> **Carte QSL** : modèle de carte personnel (FlexRadio 6500, Ultrabeam, 100W, Membre UBA, CQ/ITU/Région 1), à adapter dans `tab_qsl.py`.
+
 ### 📡 Réception des QSO FT8 (Decodium ou WSJT-X)
 
 Dans Decodium → **Settings → Reporting** :
@@ -192,6 +194,8 @@ py station_master.py           # Windows
 ```
 
 It can be started from any directory: `config.ini`, the `station_master.db` database, `cty.dat` and the greyline map are created next to `station_master.py` on first launch. Then open **⚙️ Paramètres** to enter your callsign, locator, CAT port and service credentials. `config.ini` holds your passwords: never publish it (it is git-ignored).
+
+> **QSL card**: personal card template (FlexRadio 6500, Ultrabeam, 100W, UBA member, CQ/ITU/Region 1), to be adapted in `tab_qsl.py`.
 
 ### 📡 FT8 QSOs (Decodium or WSJT-X)
 

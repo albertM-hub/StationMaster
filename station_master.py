@@ -436,7 +436,7 @@ def get_continent(callsign):
 # --- GLOBALS ---
 # Numéro de version unique (titre, accueil, rapport PDF, Wiki).
 # À augmenter à chaque modification livrée : ON5AM vérifie ainsi qu'il a la nouvelle version.
-APP_VERSION = "21.1"
+APP_VERSION = "21.2"
 # Valeurs neutres tant que config.ini n'est pas lu (indicatif à saisir dans ⚙️ Paramètres)
 MY_GRID = "AA00AA"
 MY_CALL = "N0CALL"

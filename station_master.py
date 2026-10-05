@@ -1904,7 +1904,12 @@ class StationMasterApp:
                 self._spe_tab.stop()
         except Exception:
             pass
-        self.root.destroy()
+        try:
+            self.root.destroy()
+        except tk.TclError as e:
+            # destroy() interrompu : on sort quand même de la boucle Tk
+            print(f"[Fermeture] destroy incomplet : {e}")
+            self.root.quit()
 
     def _load_spe_config(self):
         """Lit le port et baudrate SPE Expert depuis config.ini."""
@@ -7069,7 +7074,10 @@ class StationMasterApp:
                     daemon=True,
                 ).start()
 
-        self.root.after(0, self._apply_cluster_filter)
+        # Appelé depuis les threads cluster / DXHeat : passer par _tk_queue.
+        # Un root.after() depuis un autre thread pouvait faire échouer
+        # root.destroy() à la fermeture (processus qui ne se termine pas).
+        self._tk_queue.put(self._apply_cluster_filter)
 
     def on_cluster_click(self, e):
         """Double-clic sur un spot → syntonise la radio (colonne Freq = index 2)."""

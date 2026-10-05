@@ -43,10 +43,8 @@ smtp_host = smtp.gmail.com
 smtp_port = 587
 
 [UDP]
-source = les_deux
 wsjtxport = 2237
 multicastip = 224.0.0.1
-gridtrackerport = 2333
 
 [SPE]
 port = /dev/spe_expert

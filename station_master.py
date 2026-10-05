@@ -479,10 +479,8 @@ def load_config_safe():
         },
         "BACKUP": {"Dir": ""},
         "UDP": {
-            "Source": "wsjtx",
             "WsjtxPort": "2237",
             "MulticastIP": "224.0.0.1",
-            "GridtrackerPort": "2333",
         },
         "EMAIL": {
             "smtp_user": "on5amplus@gmail.com",
@@ -1768,10 +1766,8 @@ class StationMasterApp:
         self.create_table()
 
         # Charger la config UDP
-        self._udp_source = "wsjtx"  # wsjtx | gridtracker | les_deux
         self._udp_wsjtx_port = 2237
         self._udp_mcast_ip = "224.0.0.1"
-        self._udp_gt_port = 2333
         self._load_udp_config()
         self._load_spe_config()
 
@@ -1832,18 +1828,12 @@ class StationMasterApp:
     def _load_udp_config(self):
         """Lit la configuration UDP depuis config.ini."""
         if CONF:
-            self._udp_source = (
-                CONF.get("UDP", "Source", fallback="wsjtx").strip().lower()
-            )
             self._udp_wsjtx_port = int(CONF.get("UDP", "WsjtxPort", fallback="2237"))
             self._udp_mcast_ip = CONF.get(
                 "UDP", "MulticastIP", fallback="224.0.0.1"
             ).strip()
-            self._udp_gt_port = int(CONF.get("UDP", "GridtrackerPort", fallback="2333"))
         print(
-            f"UDP config: source={self._udp_source}  "
-            f"wsjtx_port={self._udp_wsjtx_port}  "
-            f"gt_port={self._udp_gt_port}"
+            f"UDP config: port={self._udp_wsjtx_port}  multicast={self._udp_mcast_ip}"
         )
 
     def _on_close(self):
@@ -1864,22 +1854,13 @@ class StationMasterApp:
             self._spe_baud = int(CONF.get("SPE", "baudrate", fallback="115200"))
 
     def _start_udp_threads(self):
-        """Démarre les threads UDP selon la source configurée."""
-        src = self._udp_source
-        if src in ("wsjtx", "les_deux"):
-            threading.Thread(target=self.udp_listener, daemon=True).start()
-        if src in ("gridtracker", "les_deux"):
-            threading.Thread(target=self.adif_broadcast_listener, daemon=True).start()
-        # Afficher la config dans la barre de statut au démarrage
-        labels = {
-            "wsjtx": f"WSJT-X UDP port {self._udp_wsjtx_port}",
-            "gridtracker": f"GridTracker ADIF port {self._udp_gt_port}",
-            "les_deux": f"WSJT-X:{self._udp_wsjtx_port} + GridTracker:{self._udp_gt_port}",
-        }
+        """Démarre l'écoute UDP (protocole WSJT-X, envoyé par Decodium)."""
+        threading.Thread(target=self.udp_listener, daemon=True).start()
+        # Afficher la config dans le bandeau au démarrage
         self.root.after(
             2500,
             lambda: self.lbl_data.config(
-                text=f"RX: {labels.get(src, src)}", foreground="#3daee9"
+                text=f"RX: Decodium UDP {self._udp_wsjtx_port}", foreground="#3daee9"
             ),
         )
 
@@ -1888,14 +1869,8 @@ class StationMasterApp:
         Affiche un message — le redémarrage est nécessaire pour changer le port actif.
         """
         self._load_udp_config()
-        src = self._udp_source
-        labels = {
-            "wsjtx": f"WSJT-X port {self._udp_wsjtx_port}",
-            "gridtracker": f"GridTracker port {self._udp_gt_port}",
-            "les_deux": f"Les deux (WSJT-X:{self._udp_wsjtx_port} + GT:{self._udp_gt_port})",
-        }
         self.status_var.set(
-            f"✅ Config UDP: {labels.get(src, src)} — Redémarrez pour activer le nouveau port."
+            f"✅ Config UDP: Decodium port {self._udp_wsjtx_port} — Redémarrez pour activer le nouveau port."
         )
 
     def create_table(self):
@@ -6786,72 +6761,45 @@ class StationMasterApp:
             justify="left",
         ).pack(padx=15, anchor="w")
 
-        # UDP / WSJT-X
+        # UDP / Decodium
         tab_udp = ttk.Frame(nb)
-        nb.add(tab_udp, text="📻 UDP / WSJT-X")
+        nb.add(tab_udp, text="📻 UDP / Decodium")
         frm_udp = ttk.Frame(tab_udp, padding=15)
         frm_udp.pack(fill="x")
 
         ttk.Label(
             frm_udp,
-            text="Configuration UDP — Réception des QSOs depuis WSJT-X / GridTracker",
+            text="Configuration UDP — Réception des QSOs depuis Decodium (protocole WSJT-X)",
             font=("Arial", 10, "bold"),
             foreground="#f39c12",
         ).grid(row=0, column=0, columnspan=2, pady=(0, 12), sticky="w")
 
-        # Source
-        ttk.Label(frm_udp, text="Source à écouter :", width=24, anchor="e").grid(
+        # Port UDP
+        ttk.Label(frm_udp, text="Port UDP :", width=24, anchor="e").grid(
             row=1, column=0, padx=5, pady=6, sticky="e"
-        )
-        udp_source_var = tk.StringVar(value=get("UDP", "Source", "wsjtx"))
-        cb_source = ttk.Combobox(
-            frm_udp,
-            textvariable=udp_source_var,
-            width=28,
-            values=["wsjtx", "gridtracker", "les_deux"],
-            state="readonly",
-        )
-        cb_source.grid(row=1, column=1, padx=5, pady=6, sticky="w")
-
-        # Port WSJT-X
-        ttk.Label(frm_udp, text="Port WSJT-X :", width=24, anchor="e").grid(
-            row=2, column=0, padx=5, pady=6, sticky="e"
         )
         e_wsjtx_port = ttk.Entry(frm_udp, width=10)
         e_wsjtx_port.insert(0, get("UDP", "WsjtxPort", "2237"))
-        e_wsjtx_port.grid(row=2, column=1, padx=5, pady=6, sticky="w")
+        e_wsjtx_port.grid(row=1, column=1, padx=5, pady=6, sticky="w")
         entries[("UDP", "WsjtxPort")] = e_wsjtx_port
 
         # Multicast IP
-        ttk.Label(frm_udp, text="IP Multicast WSJT-X :", width=24, anchor="e").grid(
-            row=3, column=0, padx=5, pady=6, sticky="e"
+        ttk.Label(frm_udp, text="IP Multicast :", width=24, anchor="e").grid(
+            row=2, column=0, padx=5, pady=6, sticky="e"
         )
         e_mcast = ttk.Entry(frm_udp, width=16)
         e_mcast.insert(0, get("UDP", "MulticastIP", "224.0.0.1"))
-        e_mcast.grid(row=3, column=1, padx=5, pady=6, sticky="w")
+        e_mcast.grid(row=2, column=1, padx=5, pady=6, sticky="w")
         entries[("UDP", "MulticastIP")] = e_mcast
 
-        # Port GridTracker ADIF
-        ttk.Label(frm_udp, text="Port GridTracker (ADIF) :", width=24, anchor="e").grid(
-            row=4, column=0, padx=5, pady=6, sticky="e"
-        )
-        e_gt_port = ttk.Entry(frm_udp, width=10)
-        e_gt_port.insert(0, get("UDP", "GridtrackerPort", "2333"))
-        e_gt_port.grid(row=4, column=1, padx=5, pady=6, sticky="w")
-        entries[("UDP", "GridtrackerPort")] = e_gt_port
-
         # Aide
-        ttk.Separator(frm_udp).grid(row=5, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Separator(frm_udp).grid(row=3, column=0, columnspan=2, sticky="ew", pady=10)
         help_text = (
-            "wsjtx      → Écoute uniquement WSJT-X sur le port WSJT-X (recommandé)\n"
-            "gridtracker → Écoute uniquement GridTracker sur le port ADIF\n"
-            "les_deux   → Écoute les deux (risque de doublons si GridTracker\n"
-            "              retransmet aussi vers ce logbook)\n\n"
-            "Configuration WSJT-X (File → Settings → Reporting) :\n"
+            "Configuration Decodium (Settings → Reporting) :\n"
             "  UDP Server : 224.0.0.1   Port : 2237\n"
             "  ✅ Accept UDP requests\n\n"
-            "Si vous utilisez GridTracker : désactivez dans GridTracker\n"
-            "le renvoi ADIF vers ce logbook, et choisissez 'wsjtx'."
+            "Station Master enregistre chaque QSO validé dans Decodium\n"
+            "(message « QSO Logged »). Fonctionne aussi avec WSJT-X."
         )
         ttk.Label(
             frm_udp,
@@ -6859,17 +6807,7 @@ class StationMasterApp:
             foreground="#aaa",
             font=("Consolas", 8),
             justify="left",
-        ).grid(row=6, column=0, columnspan=2, padx=5, sticky="w")
-
-        # Lier la variable source (pas dans entries car c'est un StringVar)
-        def _save_udp_source():
-            new_cfg = configparser.ConfigParser()
-            new_cfg.read(CONFIG_FILE)
-            if not new_cfg.has_section("UDP"):
-                new_cfg.add_section("UDP")
-            new_cfg.set("UDP", "Source", udp_source_var.get())
-            with open(CONFIG_FILE, "w") as f:
-                new_cfg.write(f)
+        ).grid(row=4, column=0, columnspan=2, padx=5, sticky="w")
 
         win.protocol("WM_DELETE_WINDOW", lambda: (win.destroy()))
 
@@ -6925,10 +6863,10 @@ class StationMasterApp:
                     "QRZ_Key",
                 ):
                     new_cfg.set(sec, key, val)
-            # Sauvegarder la source UDP (StringVar, pas dans entries)
-            if not new_cfg.has_section("UDP"):
-                new_cfg.add_section("UDP")
-            new_cfg.set("UDP", "Source", udp_source_var.get())
+            # Anciennes clés GridTracker : retirées du config.ini à l'enregistrement
+            if new_cfg.has_section("UDP"):
+                new_cfg.remove_option("UDP", "Source")
+                new_cfg.remove_option("UDP", "GridtrackerPort")
             with open(CONFIG_FILE, "w") as f:
                 new_cfg.write(f)
             load_config_safe()
@@ -8005,11 +7943,10 @@ class StationMasterApp:
             messagebox.showerror("Erreur", f"Impossible d'ajouter le QSO :\n{e}")
 
     def udp_listener(self):
-        """Écoute les paquets UDP WSJT-X sur le port configuré (défaut 2237).
+        """Écoute les paquets UDP au protocole WSJT-X sur le port configuré (défaut 2237).
 
-        Supporte :
-        - Type 5  : QSO Logged directement depuis WSJT-X
-        - Type 12 : ADIF QSO Logged (format texte ADIF)
+        Decodium envoie ses paquets en multicast 224.0.0.1 via l'interface lo.
+        Seul le type 5 (QSO Logged) est enregistré.
         """
         port = self._udp_wsjtx_port
         mcast_ip = self._udp_mcast_ip
@@ -8064,7 +8001,7 @@ class StationMasterApp:
 
                     # Vérifie le magic WSJT-X 0xADBCCBDA avant de parser
                     if struct.unpack(">I", d[:4])[0] != 0xADBCCBDA:
-                        continue  # paquet non-WSJT-X (ADIF texte, GridTracker, etc.)
+                        continue  # paquet non-WSJT-X
 
                     try:
                         p = WSJTXPacket(d)
@@ -8088,15 +8025,8 @@ class StationMasterApp:
                                 call, grid, freq_hz, mode, rst_sent, rst_rcvd
                             )
 
-                        # ── Type 12 : ADIF QSO Logged ─────────────────────────────────
-                        # WSJT-X envoie type 5 ET type 12 pour chaque QSO.
-                        # On traite le type 12 UNIQUEMENT pour GridTracker (qui n'envoie pas type 5).
-                        # Pour wsjtx, le type 5 (_store_wsjtx_qso) suffit — le type 12 causerait un doublon.
-                        elif p.msg_type == 12 and self._udp_source == "gridtracker":
-                            p.read_str()  # Id
-                            adif_str = p.read_str()
-                            if adif_str:
-                                self._parse_adif_string(adif_str)
+                        # Le type 12 (ADIF QSO Logged) est volontairement ignoré :
+                        # Decodium envoie aussi le type 5, le traiter ferait un doublon.
 
                     except Exception as e:
                         print(f"UDP parse error: {e}")
@@ -8116,58 +8046,11 @@ class StationMasterApp:
                     pass
             time.sleep(3)
 
-    def adif_broadcast_listener(self):
-        """Écoute le broadcast ADIF UDP sur le port GridTracker configuré (défaut 2333)."""
-        port = self._udp_gt_port
-        print(f"ADIF UDP listener actif sur port {port}")
-        while True:
-            sock = None
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.settimeout(5.0)
-                sock.bind(("", port))
-
-                while True:
-                    try:
-                        d, addr = sock.recvfrom(65535)
-                    except socket.timeout:
-                        continue
-
-                    try:
-                        text = d.decode("utf-8", errors="ignore")
-                        # Le paquet ADIF commence souvent par un header, on cherche <CALL:
-                        if "<CALL:" in text.upper() or "<QSO_DATE:" in text.upper():
-                            self._parse_adif_string(text)
-                            self.root.after(
-                                0,
-                                lambda: self.lbl_data.config(
-                                    text="RX ADIF ✅", foreground="#3fb950"
-                                ),
-                            )
-                            self.root.after(
-                                3000,
-                                lambda: self.lbl_data.config(
-                                    text="RX DATA ✅", foreground="#3fb950"
-                                ),
-                            )
-                    except Exception as e:
-                        print(f"ADIF broadcast parse error: {e}")
-
-            except Exception as e:
-                print(f"ADIF broadcast listener error: {e}")
-            finally:
-                try:
-                    sock.close()
-                except:
-                    pass
-            time.sleep(3)
-
     def _store_wsjtx_qso(self, call, grid, freq_hz, mode, rst_sent, rst_rcvd):
         """Enregistre un QSO reçu depuis WSJT-X dans la base de données.
 
-        Fenêtre anti-doublon 3 min : évite les doublons quand GridTracker
-        ET WSJT-X envoient le même QSO sur leurs ports respectifs.
+        Fenêtre anti-doublon 3 min : évite un doublon si le même QSO
+        est envoyé deux fois (renvoi manuel depuis Decodium, etc.).
         """
         now_utc = datetime.now(timezone.utc)
         now_date = now_utc.strftime("%Y-%m-%d")
@@ -8247,136 +8130,6 @@ class StationMasterApp:
                 self.status_var.set(f"✅ FT8 QSO : {call}  {band}  {mode}"),
             ),
         )
-
-    def _parse_adif_string(self, adif_text):
-        """Parse une string ADIF et enregistre les QSOs trouvés."""
-        adif_upper = adif_text.upper()
-        # Split sur <EOR> pour avoir les enregistrements
-        records = re.split(r"<EOR>", adif_upper, flags=re.IGNORECASE)
-        c = self.conn.cursor()
-        inserted = 0
-        for r in records:
-            if "<CALL:" not in r:
-                continue
-
-            def gf(tag):
-                m = re.search(rf"<{tag}:\d+(?::\w)?>([^<]+)", r, re.IGNORECASE)
-                return m.group(1).strip() if m else ""
-
-            call = gf("CALL")
-            if not call:
-                continue
-            d_raw = gf("QSO_DATE")
-            t_raw = gf("TIME_ON")
-            qso_date = (
-                f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:]}"
-                if len(d_raw) == 8
-                else datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            )
-            qso_time = (
-                f"{t_raw[:2]}:{t_raw[2:4]}"
-                if len(t_raw) >= 4
-                else datetime.now(timezone.utc).strftime("%H:%M")
-            )
-            band = gf("BAND") or freq_to_band(gf("FREQ"))
-            mode = gf("MODE") or "FT8"
-            rst_s = gf("RST_SENT") or "-59"
-            rst_r = gf("RST_RCVD") or "-59"
-            grid = gf("GRIDSQUARE")
-            name = gf("NAME")
-            qth = gf("QTH")
-            freq = gf("FREQ")
-            comment = gf("COMMENT")
-
-            # Anti-doublon : même call + même bande dans ±3 min
-            qso_mins = 0
-            try:
-                qso_mins = int(qso_time[:2]) * 60 + int(qso_time[3:5])
-            except:
-                pass
-            rows_dup = c.execute(
-                "SELECT time_on FROM qsos WHERE callsign=? AND UPPER(band)=UPPER(?) AND qso_date=?",
-                (call, band, qso_date),
-            ).fetchall()
-            is_dup = False
-            for (t,) in rows_dup:
-                try:
-                    h, m = int(t[:2]), int(t[3:5])
-                    if abs((h * 60 + m) - qso_mins) <= 3:
-                        is_dup = True
-                        break
-                except:
-                    pass
-            if is_dup:
-                continue
-
-            c.execute(
-                "INSERT INTO qsos (qso_date, time_on, callsign, band, mode, "
-                "rst_sent, rst_rcvd, name, qth, qsl_sent, qsl_rcvd, distance, "
-                "grid, freq, qrz_stat, eqsl_stat, lotw_stat, club_stat, comment) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    qso_date,
-                    qso_time,
-                    call,
-                    band,
-                    mode,
-                    rst_s,
-                    rst_r,
-                    name,
-                    qth,
-                    "",
-                    "",
-                    "",
-                    grid,
-                    freq,
-                    "ADIF",
-                    "ADIF",
-                    "No",
-                    "ADIF",
-                    comment,
-                ),
-            )
-            inserted += 1
-        if (not name or not qth) and hasattr(self, "qrz") and self.qrz:
-            row_id = c.lastrowid
-            threading.Thread(
-                target=self._auto_qrz_lookup, args=(call, row_id), daemon=True
-            ).start()
-        if inserted > 0:
-            self.conn.commit()
-            print(f"ADIF: {inserted} QSO(s) importé(s)")
-            self.root.after(
-                0,
-                lambda: (
-                    self.cb_band.set("All"),
-                    self.cb_mode.set("All"),
-                    self.load_data(),
-                    self.status_var.set(f"✅ ADIF QSO importé ({inserted})"),
-                ),
-            )
-
-    def _auto_qrz_lookup(self, call, row_id):
-        """Lookup QRZ automatique après réception ADIF — complète nom/qth/grid."""
-        try:
-            info = self.qrz.get_info(call)
-            if not info:
-                return
-            name = info.get("name", "")
-            qth = info.get("city", "")
-            grid = info.get("grid", "")
-            if name or qth or grid:
-                c = self.conn.cursor()
-                c.execute(
-                    "UPDATE qsos SET name=COALESCE(NULLIF(name,''),?), "
-                    "qth=COALESCE(NULLIF(qth,''),?), "
-                    "grid=COALESCE(NULLIF(grid,''),?) WHERE id=?",
-                    (name, qth, grid, row_id),
-                )
-                self.conn.commit()
-                self.root.after(0, self.load_data)
-        except Exception as e:
-            print(f"[QRZ auto-lookup] {e}")
 
     def _upload_lotw_tqsl(self, d, row_id):
         """Signe et envoie automatiquement un QSO à LoTW via TQSL en ligne de commande.

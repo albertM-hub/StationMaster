@@ -2140,6 +2140,7 @@ class StationMasterApp:
         # --- Onglet Journal ---
         t_log = tk.Frame(self.nb, bg=BG)
         self.nb.add(t_log, text="🔴 Journal")
+        self._tab_journal = t_log  # sélection par widget, pas par position
         try:
             self.nb.tab(t_log, foreground="red")
         except tk.TclError:
@@ -2298,6 +2299,7 @@ class StationMasterApp:
         # --- Onglet Carte Live ---
         t_map = tk.Frame(self.nb, bg=BG)
         self.nb.add(t_map, text="🌍 Carte Live")
+        self._tab_map = t_map  # sélection par widget, pas par position
         map_ctrl = tk.Frame(t_map, bg=BG)
         map_ctrl.pack(fill="x", padx=5, pady=3)
         self.greyline_var = tk.BooleanVar(value=True)
@@ -3038,7 +3040,7 @@ class StationMasterApp:
         if len(locator) >= 4:
             pos = grid_to_latlon(locator)
             if pos:
-                self.nb.select(1)  # Aller sur l'onglet Carte
+                self.nb.select(self._tab_map)  # Aller sur l'onglet Carte Live
                 self.map_widget.set_position(pos[0], pos[1])
                 self.map_widget.set_zoom(6)
                 m = self.map_widget.set_marker(
@@ -6811,7 +6813,7 @@ class StationMasterApp:
             )
             win.destroy()
             # Aller sur l'onglet Journal
-            self.nb.select(1)
+            self.nb.select(self._tab_journal)
 
         def reset():
             self.e_s.delete(0, tk.END)

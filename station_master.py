@@ -434,6 +434,9 @@ def get_continent(callsign):
 
 
 # --- GLOBALS ---
+# Numéro de version unique (titre, accueil, rapport PDF, Wiki).
+# À augmenter à chaque modification livrée : ON5AM vérifie ainsi qu'il a la nouvelle version.
+APP_VERSION = "21.1"
 # Valeurs neutres tant que config.ini n'est pas lu (indicatif à saisir dans ⚙️ Paramètres)
 MY_GRID = "AA00AA"
 MY_CALL = "N0CALL"
@@ -1560,7 +1563,7 @@ class WSJTXPacket:
 class StationMasterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"{MY_CALL} Station Master V21.0")
+        self.root.title(f"{MY_CALL} Station Master V{APP_VERSION}")
         # File thread-safe pour les callbacks tkinter depuis des threads bg (Python 3.14+)
         self._tk_queue = queue.Queue()
         self.root.after(100, self._process_tk_queue)
@@ -3357,7 +3360,7 @@ class StationMasterApp:
             )
             story.append(
                 Paragraph(
-                    f"Station Master V21.0  •  {MY_CALL}  •  {MY_GRID}  •  Rapport généré le {datetime.now().strftime('%d/%m/%Y')}",
+                    f"Station Master V{APP_VERSION}  •  {MY_CALL}  •  {MY_GRID}  •  Rapport généré le {datetime.now().strftime('%d/%m/%Y')}",
                     ParagraphStyle(
                         "Footer", fontSize=8, textColor=colors.grey, alignment=TA_CENTER
                     ),
@@ -6541,7 +6544,7 @@ class StationMasterApp:
             load_config_safe()
             self._load_cluster_filters()
             self._reload_udp_config()
-            self.root.title(f"{MY_CALL} Station Master V21.0")
+            self.root.title(f"{MY_CALL} Station Master V{APP_VERSION}")
             self.status_var.set(
                 "✅ Configuration sauvegardée — Redémarrez pour appliquer tous les changements."
             )
@@ -9109,7 +9112,7 @@ def show_splash(root):
     canvas.create_text(
         w // 2,
         185,
-        text="V21.0  —  Python Edition",
+        text=f"V{APP_VERSION}  —  Python Edition",
         font=("Consolas", 10),
         fill="#5588aa",
         anchor="center",
@@ -9169,7 +9172,7 @@ def ask_backup_dir_first_time():
 
     result = messagebox.askyesno(
         "🗂️ Configuration du dossier de backup",
-        "Bienvenue dans Station Master V21.0 !\n\n"
+        f"Bienvenue dans Station Master V{APP_VERSION} !\n\n"
         "Aucun dossier de backup n'est encore configuré.\n\n"
         "Voulez-vous choisir maintenant le dossier où\n"
         "vos sauvegardes seront enregistrées à la fermeture ?\n\n"

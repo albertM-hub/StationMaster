@@ -1,6 +1,6 @@
 """
 tab_spe_expert.py — Onglet SPE Expert pour Station Master
-ON5AM Station Master V21.0
+ON5AM Station Master
 
 Contrôle et monitoring de l'ampli SPE Expert 1.3K-FA / 2K-FA
 via port série — thread-safe, non-bloquant.

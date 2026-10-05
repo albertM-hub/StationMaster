@@ -1,6 +1,6 @@
 """
 tab_qsl_email.py — Onglet QSL Email pour Station Master
-ON5AM Station Master V21.0
+ON5AM Station Master
 
 Affiche tous les QSOs avec statut d'envoi email QSL.
 Double-clic sur une ligne → fenêtre d'envoi via QSLEmailer (tab_qsl.py).

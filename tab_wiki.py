@@ -3,6 +3,16 @@
 # Tags disponibles : h1, h2, h3, code, tip, warn, ok, "" (normal)
 
 
+def _version():
+    """Numéro de version lu dans station_master.APP_VERSION (une seule source)."""
+    try:
+        import station_master
+
+        return station_master.APP_VERSION
+    except Exception:
+        return "?"
+
+
 def wiki_quickstart():
     return [
         ("h1", "  Station Master — Guide de démarrage rapide"),
@@ -1347,7 +1357,7 @@ def wiki_troubleshoot():
         ),
         ("", ""),
         ("h2", "  Version & informations"),
-        ("ok", "  Station Master V21.0 — développé pour ON5AM"),
+        ("ok", f"  Station Master V{_version()} — développé pour ON5AM"),
         ("ok", "  Plateforme : Linux (Kubuntu) et Windows"),
         ("ok", "  Base de données : SQLite (station_master.db)"),
         ("ok", "  DXCC lookup : cty.dat (country-files.com) — 4 482 préfixes"),

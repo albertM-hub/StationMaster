@@ -799,6 +799,14 @@ def wiki_dashboard():
         ("ok", "  ✅ QSL_RCVD = Y dans vos QSOs (QSL physique)"),
         ("ok", "  ✅ Confirmations manuelles via l'onglet DXCC"),
         ("tip", "  💡 Les entités non reconnues par cty.dat sont exclues du compteur"),
+        (
+            "tip",
+            "  💡 Les entités WAE seulement (Sicily, European Turkey, African Italy…) ne comptent pas",
+        ),
+        (
+            "tip",
+            "     comme DXCC : même règle (ARRL) pour le Dashboard, DX World et Logbook Analysis",
+        ),
         ("", ""),
         ("h2", "  Rapport PDF"),
         ("", "  Bouton 📄 Générer Rapport PDF → crée un rapport complet A4 avec :"),

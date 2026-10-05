@@ -534,6 +534,7 @@ _cty_country_zone = {}  # country name -> zone CQ par défaut
 _cty_prefix_zone = {}  # prefix -> zone CQ (override spécifique)
 _cty_exact_zone = {}  # indicatif exact -> zone CQ (override spécifique)
 _cty_country_continent = {}  # country name -> continent (EU/AS/NA/SA/OC/AF)
+_cty_non_dxcc = set()  # entités WAE seulement (préfixe « * » dans cty.dat)
 _cty_loaded = False
 
 
@@ -596,6 +597,10 @@ def _parse_cty(path):
         continent = parts[3].strip()
         if continent:
             country_continent[country] = continent
+        # Préfixe principal précédé de « * » : entité WAE seulement, pas DXCC
+        # (Sicily, European Turkey, African Italy, Shetland, Vienna Intl Ctr)
+        if parts[7].strip().startswith("*"):
+            _cty_non_dxcc.add(country)
 
         # Tous les alias (préfixes) de l'entrée
         alias_text = " ".join(alias_lines)
@@ -655,6 +660,19 @@ def _prefix_lookup(call):
         if country:
             return country
     return ""
+
+
+def is_dxcc_entity(name):
+    """Vrai si l'entité compte pour le DXCC ARRL (règle unique pour tous les compteurs).
+
+    cty.dat liste aussi des entités WAE seulement (marquées « * ») : elles
+    restent affichées comme pays, mais ne sont pas comptées comme DXCC.
+    """
+    if not name:
+        return False
+    if not _cty_loaded:
+        _load_cty()
+    return name not in _cty_non_dxcc
 
 
 def get_country_name(callsign):
@@ -2734,7 +2752,7 @@ class StationMasterApp:
         waz_set = set()
         for (call,) in c.execute("SELECT callsign FROM qsos"):
             entity = get_country_name(call)
-            if entity:
+            if is_dxcc_entity(entity):
                 countries.add(entity)
             zone = get_cq_zone(call)
             if zone:
@@ -2789,7 +2807,7 @@ class StationMasterApp:
                 "SELECT callsign, lotw_stat, eqsl_stat, qsl_rcvd FROM qsos"
             ):
                 cn = get_country_name(call)
-                if not cn:
+                if not is_dxcc_entity(cn):
                     continue
                 countries.add(cn)
                 if (
@@ -2798,11 +2816,13 @@ class StationMasterApp:
                     or (qslr and qslr.upper() in ("Y", "YES", "R"))
                 ):
                     conf_entities.add(cn)
-            # Ajouter les confirmations manuelles (table dxcc_confirmed)
+            # Ajouter les confirmations manuelles (table dxcc_confirmed),
+            # seulement pour une entité travaillée (comme l'onglet DX World)
             for (entity,) in c.execute(
                 "SELECT entity FROM dxcc_confirmed WHERE confirmed=1"
             ):
-                conf_entities.add(entity)
+                if entity in countries:
+                    conf_entities.add(entity)
             self.dash_dxcc_var.set(str(len(countries)))
             self.dash_dxcc_conf_var.set(f"{len(conf_entities)} confirmés")
 
@@ -3177,7 +3197,7 @@ class StationMasterApp:
             countries = set()
             for (call,) in calls:
                 cn = get_country_name(call)
-                if cn:
+                if is_dxcc_entity(cn):
                     countries.add(cn)
             confirmed = c.execute(
                 "SELECT COUNT(*) FROM dxcc_confirmed WHERE confirmed=1"
@@ -4396,7 +4416,7 @@ class StationMasterApp:
                 cnt = 0
                 for date, call in rows:
                     entity = get_country_name(call)
-                    if entity and entity not in seen:
+                    if is_dxcc_entity(entity) and entity not in seen:
                         seen.add(entity)
                         cnt += 1
                         dates_new.append(date)

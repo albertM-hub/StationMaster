@@ -219,8 +219,11 @@ class StatsDashboardTab:
                 entity, continent, zone = _resolve_call(
                     sm, (call or "").strip().upper()
                 )
+                # Entités WAE seulement (Sicily...) : affichées, pas comptées DXCC
+                is_dxcc = sm.is_dxcc_entity(entity)
                 if entity:
                     entity_ctr[entity] += 1
+                if is_dxcc:
                     entities_worked.add(entity)
                 if continent:
                     continent_ctr[continent] += 1
@@ -244,7 +247,7 @@ class StatsDashboardTab:
                 is_confirmed = is_lotw or is_eqsl or is_qsl
                 if is_confirmed:
                     n_award += 1
-                    if entity:
+                    if is_dxcc:
                         entities_confirmed_overall.add(entity)
                         if b:
                             band_entity_confirmed[b].add(entity)

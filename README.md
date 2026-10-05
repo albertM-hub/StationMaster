@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey.svg)](https://github.com/albertM-hub/StationMaster)
+[![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey.svg)](https://github.com/albertM-hub/StationMaster)
 
 ![Station Master](logo/station_masters.png)
 

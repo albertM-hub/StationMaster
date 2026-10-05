@@ -446,7 +446,8 @@ MY_NAME, MY_CITY, MY_REGION, MY_COUNTRY = "Albert", "Ans", "Wallonie", "Belgique
 CAT_PORT = "COM4"
 CAT_BAUD = 9600
 CONF = None
-BACKUP_DIR = "/home/albert/Bureau"  # Dossier de backup choisi par l'utilisateur
+# Dossier de backup : [BACKUP] Dir de config.ini ; vide → Backups/ à côté du programme
+BACKUP_DIR = ""
 
 # ==========================================
 # --- CONFIGURATION ---

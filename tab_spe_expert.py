@@ -11,7 +11,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 
-# ── Palette (idem tab_ft8_monitor) ───────────────────────────────────────────
+# ── Palette (idem station_master) ────────────────────────────────────────────
 BG     = "#0d1117"
 BG2    = "#161b22"
 BG3    = "#21262d"

@@ -28,7 +28,7 @@ a = Analysis(
         'reportlab.lib.units', 'reportlab.lib.colors', 'reportlab.platypus',
         'reportlab.lib.enums',
         'flex_client', 'spe_expert', 'contest_tab',
-        'tab_dxcc', 'tab_dxpeditions', 'tab_dx_unified', 'tab_ft8_monitor',
+        'tab_dxcc', 'tab_dxpeditions', 'tab_dx_unified',
         'tab_grayline', 'tab_qsl', 'tab_qsl_email', 'tab_spe_expert',
         'tab_weather', 'tab_wiki', 'tab_satellites',
         'satellites_passages', 'satellites_carte',

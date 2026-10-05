@@ -8,7 +8,7 @@ Double-clic sur une ligne → fenêtre d'envoi via QSLEmailer (tab_qsl.py).
 import tkinter as tk
 from tkinter import ttk
 
-# ── Palette (idem tab_ft8_monitor / station_master) ──────────────────────────
+# ── Palette (idem station_master) ──────────────────────────
 BG     = "#0d1117"
 BG2    = "#161b22"
 BG3    = "#21262d"

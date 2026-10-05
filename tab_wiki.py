@@ -760,6 +760,11 @@ def wiki_qsl():
         ("", "  3. Choisissez un thème (Classique / Nuit DX / Vintage / Contest)"),
         ("", "  4. Modifiez le message et votre QTH si nécessaire"),
         ("", "  5. 💾 Enregistrer PNG/PDF ou 🖨️ Imprimer directement"),
+        (
+            "tip",
+            "  💡 Modèle de carte personnel (FlexRadio 6500, Ultrabeam, 100W, Membre UBA,"
+            " CQ/ITU/Région 1), à adapter dans tab_qsl.py",
+        ),
     ]
 
 

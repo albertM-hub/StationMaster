@@ -1402,6 +1402,11 @@ class QRZLogbookManager:
                 timeout=15,
             )
             ok = "STATUS=OK" in r.text or "LOGID" in r.text
+            # « duplicate » : le QSO est déjà dans le logbook QRZ (arrivé par un
+            # autre chemin) → c'est un succès, pas un échec à renvoyer.
+            if "duplicate" in r.text.lower():
+                print(f"[QRZ] upload {call}: ✅ déjà présent sur QRZ (duplicate)")
+                return True
             print(f"[QRZ] upload {call}: {'✅' if ok else '❌'} {r.text[:80]}")
             return ok
         except Exception as e:

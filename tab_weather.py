@@ -17,6 +17,15 @@ _LAT = 50.5681
 _LON = 5.5269
 _REFRESH_MS = 3_600_000   # 60 minutes
 
+
+def _titre():
+    """Titre du cadre Météo : ville, pays et locator de config.ini (secours : Ans)."""
+    try:
+        import station_master as _sm
+        return f"🌤️ Météo — {_sm.MY_CITY}, {_sm.MY_COUNTRY}  ({_sm.MY_GRID})"
+    except Exception:
+        return "🌤️ Météo — Ans, Belgique  (JO20SP)"
+
 # Codes WMO → (icône Unicode, description française courte)
 _WMO: dict[int, tuple[str, str]] = {
     0:  ("☀️",  "Ciel dégagé"),
@@ -107,7 +116,7 @@ class WeatherWidget:
     def _build_full(self, parent: tk.Frame):
         """Version large autonome avec LabelFrame propre."""
         outer = tk.LabelFrame(
-            parent, text="🌤️ Météo — Ans, Belgique  (JO20SP)",
+            parent, text=_titre(),
             bg=self._bg, fg="#3daee9", font=("Arial", 9, "bold"),
             bd=1, relief="groove", padx=10, pady=6,
         )

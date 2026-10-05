@@ -17,10 +17,28 @@ import os
 # ------------------------------------------------------------------
 # Configuration - À ADAPTER SI BESOIN
 # ------------------------------------------------------------------
-# Position dérivée de ton locator JO20SP (Ans, Belgique)
-# Corrige avec tes coordonnées exactes si tu les connais (plus précis que le locator)
-MA_LATITUDE = 50.646
-MA_LONGITUDE = 5.542
+# Position : centre du locator [USER] Grid de config.ini (4 ou 6 caractères).
+# Secours, et valeur gardée pour JO20SP : coordonnées d'Ans, Belgique.
+def _position_config():
+    """(lat, lon) du locator de config.ini, ou None (absent, illisible, JO20SP)."""
+    import configparser
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini"))
+        g = cfg.get("USER", "Grid", fallback="").strip().upper()
+        if g == "JO20SP":
+            return None
+        lon = (ord(g[0]) - 65) * 20 - 180 + int(g[2]) * 2
+        lat = (ord(g[1]) - 65) * 10 - 90 + int(g[3])
+        if len(g) >= 6 and "A" <= g[4] <= "X" and "A" <= g[5] <= "X":
+            return (lat + (ord(g[5]) - 65) * 2.5 / 60 + 1.25 / 60,
+                    lon + (ord(g[4]) - 65) * 5 / 60 + 2.5 / 60)
+        return (lat + 0.5, lon + 1)
+    except (configparser.Error, IndexError, ValueError):
+        return None
+
+
+MA_LATITUDE, MA_LONGITUDE = _position_config() or (50.646, 5.542)
 MON_ALTITUDE_M = 100  # altitude approximative en mètres
 
 # Élévation minimale (en degrés) pour qu'un passage soit considéré comme utile

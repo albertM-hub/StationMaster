@@ -25,7 +25,7 @@ def wiki_quickstart():
         ("code", "  python3 -m venv venv && source venv/bin/activate"),
         ("code", "  pip install -r requirements.txt"),
         ("", ""),
-        ("h2", "  Installation — Windows"),
+        ("h2", "  Installation — Windows (non testé)"),
         ("code", "  py -m venv venv && venv\\Scripts\\activate"),
         ("code", "  pip install -r requirements.txt"),
         (
@@ -1363,8 +1363,9 @@ def wiki_troubleshoot():
         ("", ""),
         ("h2", "  Version & informations"),
         ("ok", f"  Station Master V{_version()} — développé pour ON5AM"),
-        ("ok", "  Plateforme : Linux (Kubuntu) et Windows"),
+        ("ok", "  Plateforme : développé et testé uniquement sous Linux (Ubuntu/Kubuntu)"),
+        ("", "  Windows et macOS : non testés"),
         ("ok", "  Base de données : SQLite (station_master.db)"),
         ("ok", "  DXCC lookup : cty.dat (country-files.com) — 4 482 préfixes"),
-        ("ok", "  Python 3.10+ requis"),
+        ("ok", "  Python 3.10+ requis (testé avec Python 3.10 et 3.14)"),
     ]

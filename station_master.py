@@ -1114,8 +1114,19 @@ class PSKReporterThread(threading.Thread):
     def run(self):
         while self.running:
             try:
-                url = f"https://retrieve.pskreporter.info/query?receiverCallsign={self.callsign}&flowStartSeconds=-3600&statistics=0"
-                resp = requests.get(url, timeout=15)
+                # senderCallsign : rapports où NOTRE indicatif a été ENTENDU
+                # (receiverCallsign donnait l'inverse, donc une liste vide).
+                url = (
+                    "https://retrieve.pskreporter.info/query"
+                    f"?senderCallsign={self.callsign}&flowStartSeconds=-3600"
+                    "&rronly=1&noactive=1"
+                )
+                resp = requests.get(
+                    url, timeout=30, headers={"User-Agent": "StationMaster"}
+                )
+                if not resp.content.strip():
+                    # Réponse vide : PSK Reporter limite les requêtes (1 / 5 min)
+                    raise ValueError("réponse vide (trop de requêtes ?)")
                 root = ET.fromstring(resp.content)
                 spots = []
                 for rec in root.findall(".//receptionReport"):
@@ -1154,6 +1165,7 @@ class PSKReporterThread(threading.Thread):
                 self.callback(spots)
             except Exception as e:
                 print(f"PSKReporter error: {e}")
+                self.callback(None, str(e))
             time.sleep(300)  # Refresh toutes les 5 minutes
 
 
@@ -2746,10 +2758,18 @@ class StationMasterApp:
             width=24,
         ).pack(side="left", padx=5)
 
-    def _on_psk_spots(self, spots):
-        """Callback appelé par PSKReporterThread avec les spots reçus."""
+    def _on_psk_spots(self, spots, error=None):
+        """Callback appelé par PSKReporterThread avec les spots reçus.
+
+        spots=None + error : échec de la requête ; on garde la dernière liste
+        et on l'indique au lieu de rester bloqué sur « Chargement... ».
+        """
+        if spots is None:
+            msg = f"⚠️ PSK Reporter indisponible ({error[:60]}) — nouvel essai dans 5 min"
+            self._tk_queue.put(lambda: self.psk_count_var.set(msg))
+            return
         self._psk_spots = spots
-        self.root.after(0, self._refresh_psk_tab)
+        self._tk_queue.put(self._refresh_psk_tab)
 
     def _compute_award_stats(self):
         """Calcule les stats réelles DXCC/WAZ/WAS depuis la DB (sans cap arbitraire).

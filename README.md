@@ -2,9 +2,9 @@
 
 **Logbook radio amateur & gestion de station — par ON5AM (Albert)**
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey.svg)](https://github.com/albertM-hub/StationMaster)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey.svg)](https://github.com/albertM-hub/StationMaster)
 
 ![Station Master](logo/station_masters.png)
 
@@ -14,73 +14,110 @@
 
 ### Description
 
-**Station Master** est un logbook radio amateur complet développé en Python (Tkinter / ttkbootstrap), conçu pour les radioamateurs qui veulent gérer leur station depuis une interface moderne et intuitive, sous Linux.
+**Station Master** est un logbook radio amateur complet écrit en Python (Tkinter / ttkbootstrap), base SQLite. Il gère le journal de trafic, les confirmations QSL, les diplômes, la propagation et le matériel de la station (FlexRadio, ampli SPE Expert). Les QSO FT8 arrivent automatiquement depuis **Decodium** (ou WSJT-X) par UDP.
 
-### ✨ Fonctionnalités principales
+Développé et utilisé au quotidien sous Linux (Kubuntu) ; le code prend aussi en charge Windows.
 
-- 📖 **Journal de trafic** — Enregistrement automatique (FT8/WSJT-X) ou manuel des QSOs
-- 🔗 **Intégration WSJT-X / Decodium** — Réception UDP des QSOs (port configurable)
-- 🌍 **Carte Live & Greyline** — Visualisation des QSOs sur carte interactive animée
-- 📡 **DX Cluster** — Spots en temps réel avec filtres par bande/mode/pays
-- 🏆 **DXCC & Awards** — Suivi de progression DXCC, WAZ, WAS
-- 🌐 **Propagation** — Indices SFI, K, A en temps réel
-- 📬 **QSL Manager** — Suivi eQSL, LoTW, ClubLog + envoi par e-mail
-- 🖨️ **Cartes QSL** — Génération de cartes QSL personnalisées
-- 🏁 **Contest** — Onglet dédié aux contests
-- 🎛️ **SPE Expert** — Pilotage de l'ampli SPE Expert via port série
-- 💾 **Backup automatique** — Sauvegarde à chaque fermeture
+### 🗂️ Les onglets
+
+| Onglet | Rôle |
+|--------|------|
+| 🏠 Dashboard | QSOs du jour, DXCC travaillés/confirmés, propagation, barres Awards, activité |
+| 📻 Flex-6500 | Pilotage et mesures du transceiver FlexRadio |
+| ⚡ SPE | Ampli SPE Expert 1.3K-FA (port série) |
+| 🌐 Propagation | SFI, K, A, MUF estimée, synthèse des conditions du jour |
+| 📊 Logbook Analysis | Statistiques du log, bandes prioritaires pour les diplômes multi-bandes |
+| 🔴 Journal | Saisie et liste des QSOs, envoi automatique QRZ / eQSL / LoTW / Club Log |
+| 🌍 Carte Live | Carte des QSOs et des spots |
+| 📧 QSL Email | Envoi des cartes QSL par e-mail |
+| 🖨️ QSL Card | Création de cartes QSL (PNG / PDF) |
+| 🌙 Grayline | Carte jour/nuit en temps réel |
+| 🛰️ Satellites | Prochains passages des satellites radioamateurs |
+| 📡 DX Live | DX Cluster enrichi et DXpéditions |
+| 📻 PSK Reporter | Où votre signal est entendu |
+| 🌍 DX World / DXCC | Les 340 entités DXCC, statut travaillé / confirmé |
+| 📊 Graphiques | QSOs par bande, mode, année |
+| 🗺️ Heatmap | Densité des QSOs par locator |
+| 🏆 Contests | Calendrier des contests (WA7BNM) |
+| 📖 Wiki | Aide intégrée |
 
 ### 📋 Prérequis
 
-- Python 3.9 ou supérieur
-- `tkinter` (inclus avec Python sur la plupart des distributions ; sous Debian/Ubuntu : `sudo apt install python3-tk`)
+- **Python 3.10 ou plus récent**
+- `tkinter` : fourni avec Python sous Windows ; sous Debian/Ubuntu, paquet `python3-tk`
+- Bibliothèques Python : voir [`requirements.txt`](requirements.txt) — ttkbootstrap, tkintermapview, requests, pyserial, matplotlib, Pillow, reportlab, skyfield (+ win10toast, optionnel, sous Windows)
 
-### 📥 Installation depuis les sources
+### 📥 Installation — Linux (Debian, Ubuntu, Kubuntu)
 
 ```bash
+sudo apt install python3-tk python3-venv git
 git clone https://github.com/albertM-hub/StationMaster.git
 cd StationMaster
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 📦 Installation via l'exécutable Linux
+### 📥 Installation — Windows
 
-👉 **[Télécharger la dernière version](https://github.com/albertM-hub/StationMaster/releases/latest)**
+Installez Python 3.10+ depuis [python.org](https://www.python.org/downloads/) (tkinter est inclus), puis dans une invite de commandes :
 
-Décompressez l'archive et lancez le binaire `station_master`. `config.ini` et la base de données seront créés automatiquement au premier lancement.
+```bat
+git clone https://github.com/albertM-hub/StationMaster.git
+cd StationMaster
+py -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 🚀 Lancement
+
+```bash
+# Linux (environnement virtuel activé)
+python3 station_master.py
+```
+
+```bat
+:: Windows (environnement virtuel activé)
+py station_master.py
+```
+
+Le programme peut être lancé depuis n'importe quel répertoire : `config.ini`, la base `station_master.db`, `cty.dat` (base DXCC) et la carte greyline sont créés ou téléchargés dans le dossier de `station_master.py` au premier démarrage.
 
 ### ⚙️ Configuration
 
-1. Copiez le fichier d'exemple :
-   ```bash
-   cp config.ini.example config.ini
-   ```
-2. Éditez `config.ini` avec votre indicatif, vos identifiants QRZ/eQSL/LoTW/ClubLog et vos ports (CAT, SPE Expert).
+Au premier lancement, ouvrez **⚙️ Paramètres** et indiquez votre indicatif, votre locator, le port CAT et, si vous les utilisez, vos identifiants QRZ / eQSL / LoTW / Club Log et le port de l'ampli SPE Expert.
 
-### ⚙️ Configuration WSJT-X / Decodium
+Vous pouvez aussi partir du modèle :
 
-Dans WSJT-X (ou Decodium) → **File → Settings → Reporting** :
+```bash
+cp config.ini.example config.ini
+```
+
+> `config.ini` contient vos mots de passe et clés : il est exclu du dépôt par `.gitignore`, ne le publiez jamais.
+
+### 📡 Réception des QSO FT8 (Decodium ou WSJT-X)
+
+Dans Decodium → **Settings → Reporting** :
+
 ```
 UDP Server    : 224.0.0.1
 Port          : 2237
 ✅ Accept UDP requests
 ```
 
-### 🚀 Usage
+Chaque QSO validé dans Decodium arrive dans le Journal. Le bandeau en haut à droite affiche `RX: Decodium UDP 2237`.
 
-```bash
-python3 station_master.py
-```
+### 📦 Exécutable Linux
 
-Au premier démarrage, Station Master télécharge automatiquement `cty.dat` (base DXCC) et la carte greyline NASA.
-
-### 🔨 Compiler l'exécutable Linux soi-même
+La page [Releases](https://github.com/albertM-hub/StationMaster/releases) propose une archive Linux (v1.0.0, juin 2026) **antérieure à cette version**. Pour la version à jour, installez depuis les sources ou compilez vous-même :
 
 ```bash
 pip install pyinstaller
 pyinstaller station_master_linux.spec --clean
 ```
-Le binaire sera dans `dist/station_master/station_master`.
+
+Le binaire se trouve dans `dist/station_master/station_master`.
 
 ### 🖥️ Installer dans le menu d'applications (Kubuntu)
 
@@ -93,7 +130,7 @@ cp station_master.desktop ~/.local/share/applications/
 
 > Si votre dossier personnel n'est pas `/home/albert`, éditez les chemins `Exec=` et `Icon=` dans le fichier `.desktop` avant de le copier.
 
-### 🤝 Contributing
+### 🤝 Contribuer
 
 ```bash
 git checkout -b feature/ma-fonctionnalite
@@ -108,61 +145,59 @@ Ouvrez ensuite une Pull Request.
 
 ### Description
 
-**Station Master** is a full-featured ham radio logbook built in Python (Tkinter / ttkbootstrap), designed for amateur radio operators who want to manage their station from a modern, intuitive interface on Linux.
+**Station Master** is a full-featured ham radio logbook written in Python (Tkinter / ttkbootstrap) with an SQLite database. It handles the QSO log, QSL confirmations, awards, propagation and station hardware (FlexRadio, SPE Expert amplifier). FT8 QSOs are received automatically from **Decodium** (or WSJT-X) over UDP.
 
-### ✨ Key Features
+Developed and used daily on Linux (Kubuntu); the code also supports Windows. The user interface is in French.
 
-- 📖 **QSO Log** — Automatic (FT8/WSJT-X) or manual QSO recording
-- 🔗 **WSJT-X / Decodium Integration** — UDP QSO reception (configurable port)
-- 🌍 **Live Map & Greyline** — Animated interactive QSO map
-- 📡 **DX Cluster** — Real-time spots with band/mode/country filters
-- 🏆 **DXCC & Awards** — DXCC, WAZ, WAS progress tracking
-- 🌐 **Propagation** — Real-time SFI, K, A indices
-- 📬 **QSL Manager** — eQSL, LoTW, ClubLog tracking + email sending
-- 🖨️ **QSL Cards** — Custom QSL card generator
-- 🏁 **Contest** — Dedicated contest tab
-- 🎛️ **SPE Expert** — SPE Expert amplifier control via serial port
-- 💾 **Auto Backup** — Saved on every close
+### 🗂️ Tabs
+
+Dashboard · Flex-6500 · SPE · Propagation · Logbook Analysis · Journal (log) · Carte Live (live map) · QSL Email · QSL Card · Grayline · Satellites · DX Live · PSK Reporter · DX World / DXCC · Graphiques (charts) · Heatmap · Contests · Wiki
 
 ### 📋 Requirements
 
-- Python 3.9+
-- `tkinter` (bundled with Python on most distros; on Debian/Ubuntu: `sudo apt install python3-tk`)
+- **Python 3.10 or newer**
+- `tkinter`: bundled with Python on Windows; on Debian/Ubuntu install `python3-tk`
+- Python libraries: see [`requirements.txt`](requirements.txt)
 
-### 📥 Installation from source
+### 📥 Installation — Linux
 
 ```bash
+sudo apt install python3-tk python3-venv git
 git clone https://github.com/albertM-hub/StationMaster.git
 cd StationMaster
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 📦 Installation via the Linux executable
+### 📥 Installation — Windows
 
-👉 **[Download latest release](https://github.com/albertM-hub/StationMaster/releases/latest)**
+Install Python 3.10+ from [python.org](https://www.python.org/downloads/), then:
 
-Unpack the archive and run the `station_master` binary. `config.ini` and the database will be created automatically on first launch.
-
-### ⚙️ Configuration
-
-```bash
-cp config.ini.example config.ini
+```bat
+git clone https://github.com/albertM-hub/StationMaster.git
+cd StationMaster
+py -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 ```
-Then edit `config.ini` with your callsign, QRZ/eQSL/LoTW/ClubLog credentials, and ports (CAT, SPE Expert).
 
 ### 🚀 Usage
 
 ```bash
-python3 station_master.py
+python3 station_master.py      # Linux
+py station_master.py           # Windows
 ```
 
-### 🔨 Build the Linux executable yourself
+It can be started from any directory: `config.ini`, the `station_master.db` database, `cty.dat` and the greyline map are created next to `station_master.py` on first launch. Then open **⚙️ Paramètres** to enter your callsign, locator, CAT port and service credentials. `config.ini` holds your passwords: never publish it (it is git-ignored).
 
-```bash
-pip install pyinstaller
-pyinstaller station_master_linux.spec --clean
-```
-The binary will be in `dist/station_master/station_master`.
+### 📡 FT8 QSOs (Decodium or WSJT-X)
+
+Settings → Reporting → UDP Server `224.0.0.1`, port `2237`, ✅ Accept UDP requests.
+
+### 📦 Linux executable
+
+The archive on the [Releases](https://github.com/albertM-hub/StationMaster/releases) page (v1.0.0, June 2026) predates this version. Install from source, or build it with `pyinstaller station_master_linux.spec --clean`.
 
 ### 🤝 Contributing
 
@@ -174,13 +209,15 @@ Fork, branch, commit, push, open a Pull Request.
 
 | Fichier | Description |
 |---------|-------------|
-| `station_master.py` | Point d'entrée principal |
-| `tab_*.py` | Onglets de l'interface (QSL, DXCC, FT8, météo, wiki, contest...) |
+| `station_master.py` | Point d'entrée et fenêtre principale |
+| `tab_*.py`, `contest_tab.py` | Onglets externes (QSL, DXCC, DX Live, Satellites, Logbook Analysis, Contests, Wiki…) |
+| `satellites_*.py` | Calcul et carte des passages satellites |
 | `flex_client.py` | Client FlexRadio |
-| `spe_expert.py` | Pilotage ampli SPE Expert |
-| `config.ini.example` | Modèle de configuration |
+| `spe_expert.py` | Pilotage de l'ampli SPE Expert |
+| `requirements.txt` | Dépendances Python |
+| `config.ini.example` | Modèle de configuration (sans données sensibles) |
 | `station_master_linux.spec` | Configuration PyInstaller (Linux) |
-| `station_master.desktop` | Entrée menu Kubuntu |
+| `station_master.desktop` | Entrée de menu Kubuntu |
 
 ---
 

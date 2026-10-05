@@ -8206,6 +8206,30 @@ class StationMasterApp:
         recs = content.split("<EOR>")
         cur = self.conn.cursor()
         inserted = skipped = 0
+        # Anti-doublon : même indicatif + date + bande, à ±10 min, QUEL QUE SOIT LE MODE.
+        # QRZ exporte parfois le même QSO deux fois (FT8 et « DATA », PSK31/PSK63…)
+        # ou avec l'heure de fin au lieu de l'heure de début (ex. EP2AES 16:58 / 17:05).
+        # L'index couvre la base ET les lignes déjà lues dans ce fichier.
+        deja = {}
+        for c_, d_, t_, b_ in cur.execute("SELECT callsign, qso_date, time_on, band FROM qsos"):
+            try:
+                deja.setdefault(
+                    ((c_ or "").upper(), d_, (b_ or "").upper()), []
+                ).append(int(t_[:2]) * 60 + int(t_[3:5]))
+            except (TypeError, ValueError):
+                pass
+
+        def _est_doublon(call, date, heure, bande):
+            try:
+                m = int(heure[:2]) * 60 + int(heure[3:5])
+            except (TypeError, ValueError):
+                return False
+            cle = (call.upper(), date, bande.upper())
+            if any(abs(m - x) <= 10 for x in deja.get(cle, [])):
+                return True
+            deja.setdefault(cle, []).append(m)
+            return False
+
         for r in recs:
             if "<CALL:" not in r:
                 continue
@@ -8244,12 +8268,7 @@ class StationMasterApp:
                     state = "AK"
                 elif country_field == "HAWAII":
                     state = "HI"
-            # Éviter les doublons (même call + date + heure + bande + mode)
-            exists = cur.execute(
-                "SELECT 1 FROM qsos WHERE callsign=? AND qso_date=? AND time_on=? AND band=? AND mode=?",
-                (call, df, tf, band, mode),
-            ).fetchone()
-            if exists:
+            if _est_doublon(call, df, tf, band):
                 skipped += 1
                 continue
             cur.execute(

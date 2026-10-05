@@ -108,7 +108,8 @@ def wiki_quickstart():
             "ok",
             "  ✅ Confirmations QSL lues automatiquement : LOTW_QSL_RCVD, EQSL_QSL_RCVD, QSL_RCVD",
         ),
-        ("ok", "  ✅ Protection anti-doublons : un QSO déjà présent est ignoré"),
+        ("ok", "  ✅ Anti-doublons : même indicatif + date + bande à ±10 min = ignoré,"),
+        ("ok", "     quel que soit le mode (QRZ exporte parfois FT8 et DATA pour un même QSO)"),
         (
             "tip",
             "  💡 Formats supportés : HRD, WSJT-X, Log4OM, DXKeeper, QRZ export...",
@@ -674,7 +675,7 @@ def wiki_qsl():
         ("ok", "  ✅ QSL_RCVD = Y       → QSL physique reçue"),
         (
             "ok",
-            "  ✅ Anti-doublons : un QSO déjà présent (même call/date/bande/mode) est ignoré",
+            "  ✅ Anti-doublons : même call/date/bande à ±10 min est ignoré, quel que soit le mode",
         ),
         (
             "tip",
@@ -1317,7 +1318,7 @@ def wiki_troubleshoot():
         ("", "  → Les fichiers Cabrillo (.cbr) ne sont pas supportés"),
         (
             "",
-            "  → Les doublons sont ignorés automatiquement (même call/date/bande/mode)",
+            "  → Les doublons sont ignorés automatiquement (même call/date/bande à ±10 min)",
         ),
         ("", ""),
         ("h2", "  Performance lente avec beaucoup de QSOs"),

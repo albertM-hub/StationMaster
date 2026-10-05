@@ -440,6 +440,9 @@ APP_VERSION = "21.1"
 # Valeurs neutres tant que config.ini n'est pas lu (indicatif à saisir dans ⚙️ Paramètres)
 MY_GRID = "AA00AA"
 MY_CALL = "N0CALL"
+# Identité affichée sur l'aperçu QSL : clés facultatives [USER] Name, City,
+# Region, Country de config.ini ; valeurs d'origine en secours.
+MY_NAME, MY_CITY, MY_REGION, MY_COUNTRY = "Albert", "Ans", "Wallonie", "Belgique"
 CAT_PORT = "COM4"
 CAT_BAUD = 9600
 CONF = None
@@ -453,6 +456,7 @@ CONFIG_FILE = os.path.join(_APP_DIR, "config.ini")
 
 def load_config_safe():
     global CONF, MY_GRID, MY_CALL, CAT_PORT, CAT_BAUD, BACKUP_DIR
+    global MY_NAME, MY_CITY, MY_REGION, MY_COUNTRY
     config = configparser.ConfigParser()
     DEFAULTS = {
         "USER": {"Callsign": "N0CALL", "Grid": "AA00AA"},
@@ -517,6 +521,10 @@ def load_config_safe():
                 config.write(f)
         MY_GRID = config.get("USER", "Grid", fallback="AA00AA")
         MY_CALL = config.get("USER", "Callsign", fallback="N0CALL")
+        MY_NAME = config.get("USER", "Name", fallback="").strip() or MY_NAME
+        MY_CITY = config.get("USER", "City", fallback="").strip() or MY_CITY
+        MY_REGION = config.get("USER", "Region", fallback="").strip() or MY_REGION
+        MY_COUNTRY = config.get("USER", "Country", fallback="").strip() or MY_COUNTRY
         CAT_PORT = config.get("CAT", "Port", fallback="COM4")
         CAT_BAUD = config.getint("CAT", "Baud", fallback=9600)
         BACKUP_DIR = config.get("BACKUP", "Dir", fallback="")
@@ -1413,7 +1421,7 @@ class QRZLogbookManager:
             print(f"[QRZ] upload error: {e}")
             return False
 
-    def check_incoming(self, call="ON5AM"):
+    def check_incoming(self):
         """Vérifie les QSL reçues sur le logbook QRZ."""
         if not self.key:
             return []
@@ -5809,13 +5817,13 @@ class StationMasterApp:
         c.create_rectangle(0, 0, W, 55, fill=DARK, outline="")
         c.create_line(0, 55, W, 55, fill=GOLD, width=2)
         c.create_text(
-            18, 10, text="ON5AM", anchor="nw", fill=GOLD, font=("Courier", 24, "bold")
+            18, 10, text=MY_CALL, anchor="nw", fill=GOLD, font=("Courier", 24, "bold")
         )
         c.create_text(
             W // 2,
             10,
             anchor="n",
-            text="Albert  •  Ans, Wallonie, Belgique  •  JO20SP",
+            text=f"{MY_NAME}  •  {MY_CITY}, {MY_REGION}, {MY_COUNTRY}  •  {MY_GRID}",
             fill=LGRAY,
             font=("Arial", 9),
         )
@@ -5957,7 +5965,7 @@ class StationMasterApp:
             ("RIG", "FlexRadio 6500", 150),
             ("ANTENNA", "Ultrabeam", 110),
             ("POWER", "100W", 70),
-            ("GRID", "JO20SP", 90),
+            ("GRID", MY_GRID, 90),
             ("QSL VIA", "Bureau / Direct / LoTW", 224),
         ]
         cx2 = 18
@@ -6069,7 +6077,7 @@ class StationMasterApp:
             W // 2,
             415,
             anchor="center",
-            text="ON5AM  •  Ans, JO20SP  •  Belgique  •  73 de Albert  •  hamanalyst.org",
+            text=f"{MY_CALL}  •  {MY_CITY}, {MY_GRID}  •  {MY_COUNTRY}  •  73 de {MY_NAME}  •  hamanalyst.org",
             fill="#446688",
             font=("Arial", 7),
         )

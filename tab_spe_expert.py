@@ -36,11 +36,11 @@ class SPEExpertTab:
     ----------
     parent   : frame tk parent
     app      : référence à StationMasterApp
-    port     : port série (ex. '/dev/ttyUSB1')
+    port     : port série (ex. '/dev/ttyUSB1') ; vide = pas de connexion automatique
     baudrate : vitesse série (défaut 115200)
     """
 
-    def __init__(self, parent, app, port: str = "/dev/ttyUSB1", baudrate: int = 115200):
+    def __init__(self, parent, app, port: str = "", baudrate: int = 115200):
         self.app      = app
         self._port    = port
         self._baud    = baudrate
@@ -182,6 +182,11 @@ class SPEExpertTab:
     def _start_thread(self):
         self._port = self._port_var.get().strip() or self._port
         self._baud = int(self._baud_var.get() or self._baud)
+        if not self._port:
+            # Aucun port configuré : pas de thread série ni de boucle de reconnexion
+            print("[SPE] Aucun port configuré (⚙️ Paramètres ou champ Port) — SPE inactif")
+            self._lbl_conn.config(text="⚪ Aucun port configuré", fg=GRAY)
+            return
         # Nouvel event par thread — l'ancien thread garde sa propre référence
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._poll_loop,

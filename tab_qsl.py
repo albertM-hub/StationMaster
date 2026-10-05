@@ -25,9 +25,26 @@ _TEXT_Y    = 985   # top du texte, data row zone y=963–1040
 _FONT_SIZE = 28
 _WHITE     = (255, 255, 255)
 
-MY_CALL  = "ON5AM"
-MY_NAME  = "Albert"
-MY_QTH   = "Ans, Belgique — JO20SP"
+# Identité de la station : section [USER] de config.ini (Callsign, Grid et,
+# facultatifs, Name, City, Region, Country) ; valeurs d'origine en secours.
+def _identite():
+    import configparser
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(_CONFIG_FILE)
+    except Exception:
+        pass
+
+    def lire(cle, secours):
+        return cfg.get("USER", cle, fallback="").strip() or secours
+
+    return (lire("Callsign", "ON5AM"), lire("Name", "Albert"), lire("City", "Ans"),
+            lire("Region", "Wallonie"), lire("Country", "Belgique"),
+            lire("Grid", "JO20SP"))
+
+
+MY_CALL, MY_NAME, MY_CITY, MY_REGION, MY_COUNTRY, MY_GRID = _identite()
+MY_QTH   = f"{MY_CITY}, {MY_COUNTRY} — {MY_GRID}"
 QSL_LINK = "https://hamanalyst.org/qsl"
 
 # ── Helpers de formatage ──────────────────────────────────────────────────────
@@ -318,8 +335,9 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
     # ── 1. HEADER (y=0–110) ────────────────────────────────────────────
     draw.rectangle([0, 0, W, 110], fill="#0a1520")
     draw.line([0, 110, W, 110], fill="#c8a800", width=4)
-    t(36,    14, "ON5AM",                                  "#c8a800", 48, mono=True)
-    t(W//2,  10, "Albert  •  Ans, Wallonie, Belgique  •  JO20SP", "#8899aa", 17, bold=False, anchor="mt")
+    t(36,    14, MY_CALL,                                  "#c8a800", 48, mono=True)
+    t(W//2,  10, f"{MY_NAME}  •  {MY_CITY}, {MY_REGION}, {MY_COUNTRY}  •  {MY_GRID}",
+      "#8899aa", 17, bold=False, anchor="mt")
     t(W//2,  36, "Rig: FlexRadio 6500  •  Membre UBA",    "#8899aa", 15, bold=False, anchor="mt")
     t(W//2,  58, "LoTW  •  eQSL  •  ClubLog  •  QRZ.com", "#5577aa", 15, bold=False, anchor="mt")
     t(W-16,  10, "CONFIRMING OUR QSO",                    "#ffffff", 17, mono=True,  anchor="rt")
@@ -368,7 +386,7 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
     draw.line([36, 356, W-36, 356], fill="#1e3a5a", width=2)
 
     sta_cols = [("RIG", "FlexRadio 6500"), ("ANTENNA", "Ultrabeam"),
-                ("POWER", "100W"), ("GRID", "JO20SP"),
+                ("POWER", "100W"), ("GRID", MY_GRID),
                 ("QSL VIA", "Bureau / Direct / LoTW")]
     cw2 = (W - 72) // len(sta_cols)
     for i, (lbl, val) in enumerate(sta_cols):
@@ -411,7 +429,7 @@ def _render_qsl_image(qso) -> "PIL.Image.Image":
 
     # ── 4. PIED (y=820–840) ────────────────────────────────────────────
     draw.rectangle([0, 820, W, H], fill="#0a1520")
-    t(W//2, 826, "ON5AM  •  Ans, JO20SP  •  Belgique  •  73 de Albert  •  hamanalyst.org",
+    t(W//2, 826, f"{MY_CALL}  •  {MY_CITY}, {MY_GRID}  •  {MY_COUNTRY}  •  73 de {MY_NAME}  •  hamanalyst.org",
       "#446688", 14, bold=False, anchor="mt")
 
     return img

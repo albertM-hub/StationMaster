@@ -1527,7 +1527,15 @@ class WSJTXPacket:
         return s
 
     def read_qdatetime(self):
-        self.cursor += 8  # julian day ms (u64)
+        # Deux variantes de QDateTime selon la version du flux Qt de l'émetteur :
+        # - Qt5 (WSJT-X) : jour julien i64 + ms u32 + timespec u8 = 13 octets
+        # - Qt4          : jour julien u32 + ms u32 + timespec u8 =  9 octets
+        # Le jour julien (~2,46 millions) tient sur 32 bits : en Qt5, les 4
+        # premiers octets valent donc toujours zéro, ce qui permet de trancher.
+        if self.d[self.cursor : self.cursor + 4] == b"\x00\x00\x00\x00":
+            self.cursor += 12  # jour julien i64 + ms u32
+        else:
+            self.cursor += 8  # jour julien u32 + ms u32
         ts = self.read_u8()
         if ts == 2:
             self.cursor += 4  # offset en secondes
@@ -8057,9 +8065,6 @@ class StationMasterApp:
                     # Vérifie le magic WSJT-X 0xADBCCBDA avant de parser
                     if struct.unpack(">I", d[:4])[0] != 0xADBCCBDA:
                         continue  # paquet non-WSJT-X (ADIF texte, GridTracker, etc.)
-
-                    if self._ft8_monitor:
-                        self._ft8_monitor.on_raw_packet(d)
 
                     try:
                         p = WSJTXPacket(d)

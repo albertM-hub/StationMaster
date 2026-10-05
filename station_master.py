@@ -482,6 +482,7 @@ def load_config_safe():
         "UDP": {
             "WsjtxPort": "2237",
             "MulticastIP": "224.0.0.1",
+            "AdifPort": "2333",
         },
         "EMAIL": {
             "smtp_user": "",
@@ -1768,6 +1769,7 @@ class StationMasterApp:
         # Charger la config UDP
         self._udp_wsjtx_port = 2237
         self._udp_mcast_ip = "224.0.0.1"
+        self._udp_adif_port = 2333
         self._load_udp_config()
         self._load_spe_config()
 
@@ -1832,8 +1834,18 @@ class StationMasterApp:
             self._udp_mcast_ip = CONF.get(
                 "UDP", "MulticastIP", fallback="224.0.0.1"
             ).strip()
+            # AdifPort : réglage « N1MM » de Decodium (BroadcastToN1MM).
+            # Repli sur l'ancienne clé GridtrackerPort d'un config.ini existant.
+            self._udp_adif_port = int(
+                CONF.get(
+                    "UDP",
+                    "AdifPort",
+                    fallback=CONF.get("UDP", "GridtrackerPort", fallback="2333"),
+                )
+            )
         print(
             f"UDP config: port={self._udp_wsjtx_port}  multicast={self._udp_mcast_ip}"
+            f"  adif={self._udp_adif_port}"
         )
 
     def _on_close(self):
@@ -1854,13 +1866,21 @@ class StationMasterApp:
             self._spe_baud = int(CONF.get("SPE", "baudrate", fallback="115200"))
 
     def _start_udp_threads(self):
-        """Démarre l'écoute UDP (protocole WSJT-X, envoyé par Decodium)."""
+        """Démarre les deux écoutes de Decodium.
+
+        - UDP au protocole WSJT-X (port 2237) ;
+        - ADIF « N1MM » (port 2333) : chez ON5AM, c'est le seul chemin qui
+          arrive réellement (le multicast via lo n'aboutit pas).
+        L'anti-doublon de _store_wsjtx_qso évite un double enregistrement.
+        """
         threading.Thread(target=self.udp_listener, daemon=True).start()
+        threading.Thread(target=self.adif_listener, daemon=True).start()
         # Afficher la config dans le bandeau au démarrage
         self.root.after(
             2500,
             lambda: self.lbl_data.config(
-                text=f"RX: Decodium UDP {self._udp_wsjtx_port}", foreground="#3daee9"
+                text=f"RX: Decodium UDP {self._udp_wsjtx_port} + ADIF {self._udp_adif_port}",
+                foreground="#3daee9",
             ),
         )
 
@@ -1870,7 +1890,8 @@ class StationMasterApp:
         """
         self._load_udp_config()
         self.status_var.set(
-            f"✅ Config UDP: Decodium port {self._udp_wsjtx_port} — Redémarrez pour activer le nouveau port."
+            f"✅ Config UDP: Decodium port {self._udp_wsjtx_port} + ADIF {self._udp_adif_port}"
+            " — Redémarrez pour activer le nouveau port."
         )
 
     def create_table(self):
@@ -6430,14 +6451,24 @@ class StationMasterApp:
         e_mcast.grid(row=2, column=1, padx=5, pady=6, sticky="w")
         entries[("UDP", "MulticastIP")] = e_mcast
 
+        # Port ADIF (réglage « N1MM » de Decodium)
+        ttk.Label(frm_udp, text="Port ADIF (N1MM) :", width=24, anchor="e").grid(
+            row=3, column=0, padx=5, pady=6, sticky="e"
+        )
+        e_adif_port = ttk.Entry(frm_udp, width=10)
+        e_adif_port.insert(0, get("UDP", "AdifPort", get("UDP", "GridtrackerPort", "2333")))
+        e_adif_port.grid(row=3, column=1, padx=5, pady=6, sticky="w")
+        entries[("UDP", "AdifPort")] = e_adif_port
+
         # Aide
-        ttk.Separator(frm_udp).grid(row=3, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Separator(frm_udp).grid(row=4, column=0, columnspan=2, sticky="ew", pady=10)
         help_text = (
             "Configuration Decodium (Settings → Reporting) :\n"
             "  UDP Server : 224.0.0.1   Port : 2237\n"
-            "  ✅ Accept UDP requests\n\n"
+            "  ✅ Accept UDP requests\n"
+            "  ✅ N1MM Logger+ Broadcasts : 127.0.0.1   Port : 2333\n\n"
             "Station Master enregistre chaque QSO validé dans Decodium\n"
-            "(message « QSO Logged »). Fonctionne aussi avec WSJT-X."
+            "(Log QSO → OK), reçu par l'un ou l'autre chemin, sans doublon."
         )
         ttk.Label(
             frm_udp,
@@ -6445,7 +6476,7 @@ class StationMasterApp:
             foreground="#aaa",
             font=("Consolas", 8),
             justify="left",
-        ).grid(row=4, column=0, columnspan=2, padx=5, sticky="w")
+        ).grid(row=5, column=0, columnspan=2, padx=5, sticky="w")
 
         win.protocol("WM_DELETE_WINDOW", lambda: (win.destroy()))
 
@@ -6501,7 +6532,7 @@ class StationMasterApp:
                     "QRZ_Key",
                 ):
                     new_cfg.set(sec, key, val)
-            # Anciennes clés GridTracker : retirées du config.ini à l'enregistrement
+            # Anciennes clés (Source, GridtrackerPort → AdifPort) : retirées à l'enregistrement
             if new_cfg.has_section("UDP"):
                 new_cfg.remove_option("UDP", "Source")
                 new_cfg.remove_option("UDP", "GridtrackerPort")
@@ -7684,16 +7715,84 @@ class StationMasterApp:
                     pass
             time.sleep(3)
 
-    def _store_wsjtx_qso(self, call, grid, freq_hz, mode, rst_sent, rst_rcvd):
-        """Enregistre un QSO reçu depuis WSJT-X dans la base de données.
+    def adif_listener(self):
+        """Écoute l'ADIF envoyé par Decodium sur le port N1MM (défaut 2333).
 
-        Fenêtre anti-doublon 3 min : évite un doublon si le même QSO
-        est envoyé deux fois (renvoi manuel depuis Decodium, etc.).
+        Decodium envoie un enregistrement ADIF par QSO validé (Log QSO → OK),
+        avec date, heure de début, bande, fréquence en MHz et reports.
         """
-        now_utc = datetime.now(timezone.utc)
+        port = self._udp_adif_port
+        print(f"ADIF UDP listener démarré — port {port}")
+        while True:
+            sock = None
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.settimeout(5.0)
+                sock.bind(("", port))
+                while True:
+                    try:
+                        d, _ = sock.recvfrom(65535)
+                    except socket.timeout:
+                        continue
+                    text = d.decode("utf-8", errors="ignore")
+                    for rec in re.split(r"<eor>", text, flags=re.IGNORECASE):
+                        try:
+                            self._store_adif_record(rec)
+                        except Exception as e:
+                            print(f"ADIF parse error: {e}")
+            except Exception as e:
+                print(f"ADIF listener error: {e}")
+            finally:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            time.sleep(3)
+
+    def _store_adif_record(self, rec):
+        """Lit un enregistrement ADIF (<CALL:3>C5R …) et l'enregistre."""
+        f = {}
+        for m in re.finditer(r"<(\w+):(\d+)(?::\w)?>", rec):
+            f[m.group(1).upper()] = rec[m.end() : m.end() + int(m.group(2))].strip()
+        call = f.get("CALL", "").upper()
+        if not call:
+            return
+        when = None
+        d, t = f.get("QSO_DATE", ""), f.get("TIME_ON", "")
+        if len(d) == 8 and len(t) >= 4:
+            when = datetime(
+                int(d[:4]), int(d[4:6]), int(d[6:8]), int(t[:2]), int(t[2:4]),
+                tzinfo=timezone.utc,
+            )
+        mode = f.get("MODE", "").upper()
+        if f.get("SUBMODE"):
+            mode = f["SUBMODE"].upper()  # ex. MFSK / FT4
+        self._store_wsjtx_qso(
+            call,
+            f.get("GRIDSQUARE", ""),
+            f.get("FREQ", ""),
+            mode,
+            f.get("RST_SENT", ""),
+            f.get("RST_RCVD", ""),
+            when=when,
+            band=f.get("BAND") or None,
+        )
+
+    def _store_wsjtx_qso(
+        self, call, grid, freq_hz, mode, rst_sent, rst_rcvd, when=None, band=None
+    ):
+        """Enregistre un QSO reçu de Decodium (UDP WSJT-X ou ADIF) dans la base.
+
+        when : datetime UTC du QSO (ADIF) ; à défaut, l'heure de réception.
+        Fenêtre anti-doublon 3 min : évite un doublon si le même QSO arrive
+        par les deux chemins (port 2237 et ADIF 2333) ou est renvoyé.
+        """
+        now_utc = when or datetime.now(timezone.utc)
         now_date = now_utc.strftime("%Y-%m-%d")
         now_time = now_utc.strftime("%H:%M")
-        band = freq_to_band(str(freq_hz))
+        # Bande en majuscules, comme les QSO importés (« 17M »)
+        band = (band or freq_to_band(str(freq_hz))).upper()
         now_mins = now_utc.hour * 60 + now_utc.minute
         print(f"[FT8] Reçu QSO: {call}  {band}  {mode}  freq={freq_hz}")
 

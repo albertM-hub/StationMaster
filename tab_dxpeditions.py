@@ -723,7 +723,7 @@ class TabDXpeditions(tk.Frame):
             font=("Consolas", 9, "bold"),
         )
         c.create_text(
-            AGENDA_W - 4,
+            W - 4,
             10,
             anchor="e",
             text=f"{active} ACTIVE  ·  {soon} SOON",

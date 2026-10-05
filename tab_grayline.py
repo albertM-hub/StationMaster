@@ -15,7 +15,7 @@ import math
 import os
 import urllib.request
 from datetime import datetime, timezone
-from PIL import Image, ImageDraw, ImageTk, ImageFont
+from PIL import Image, ImageDraw, ImageTk
 
 # ── Constantes QTH ────────────────────────────────────────────────────────────
 QTH_LAT =  50.655   # Ans, Belgique

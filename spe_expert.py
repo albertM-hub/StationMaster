@@ -98,7 +98,7 @@ class AmpStatus:
             f"  Temp      : {self.temp_c}°C",
             f"  Warning   : {self.warning or 'aucun'}",
             f"  Alarm     : {self.alarm or 'aucune'}",
-            f"╚══════════════════════════════════════════════╝",
+            "╚══════════════════════════════════════════════╝",
         ]
         return "\n".join(lines)
 

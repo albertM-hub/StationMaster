@@ -328,9 +328,9 @@ class StatsDashboardTab:
             import traceback
 
             traceback.print_exc()
-            self.root.after(
-                0, lambda: self._status_var.set(f"⚠️ Erreur stats : {str(e)[:70]}")
-            )
+            # Message figé tout de suite : « e » n'existe plus à la sortie du except
+            msg = f"⚠️ Erreur stats : {str(e)[:70]}"
+            self.root.after(0, lambda: self._status_var.set(msg))
 
     # ==========================================
     # --- Rendu ---

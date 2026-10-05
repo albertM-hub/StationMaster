@@ -154,7 +154,6 @@ _PREFIX_ISO = {
     "HS": "TH",
     "9V": "SG",
     "VR": "HK",
-    "BY": "CN",
     "BH": "CN",
     "S5": "SI",
     "9A": "HR",

@@ -219,7 +219,9 @@ class TabSatellites:
             self.tous_les_passages = passages
             self.parent.after(0, self._rafraichir_tableau)
         except Exception as e:
-            self.parent.after(0, lambda: self.label_statut.config(text=f"❌ Erreur : {e}"))
+            # Message figé tout de suite : « e » n'existe plus à la sortie du except
+            msg = f"❌ Erreur : {e}"
+            self.parent.after(0, lambda: self.label_statut.config(text=msg))
         finally:
             self.parent.after(0, lambda: self.bouton_actualiser.config(state="normal", text="🔄 Actualiser"))
 

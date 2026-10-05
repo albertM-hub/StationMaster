@@ -7,7 +7,7 @@ Solution mètres : deux connexions TCP simultanées
   - Connexion 2 (mètres)     : sub meter all → reçoit M| en temps réel
 """
 
-import socket, threading, time, math
+import socket, threading, time
 from dataclasses import dataclass
 from typing import Optional, Callable
 

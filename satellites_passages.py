@@ -9,7 +9,7 @@ Une fois validé, ce code sera intégré comme nouvel onglet "Satellites" dans
 Station Master (recommandé : via Claude Code vu la taille du projet).
 """
 
-from skyfield.api import load, wgs84, EarthSatellite
+from skyfield.api import load, wgs84
 from datetime import datetime, timedelta, timezone
 import urllib.request
 import os

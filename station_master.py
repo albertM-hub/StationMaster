@@ -845,25 +845,6 @@ def get_day_night_status():
 # ==========================================
 # --- GREYLINE CALCULATION ---
 # ==========================================
-def calc_greyline():
-    """Calcule la position approximative de la greyline (terminateur solaire)."""
-    now = datetime.now(timezone.utc)
-    day_of_year = now.timetuple().tm_yday
-    # Déclinaison solaire
-    decl = math.radians(23.45 * math.sin(math.radians(360 / 365 * (day_of_year - 81))))
-    # Heure solaire
-    hour_angle = (now.hour + now.minute / 60 - 12) * 15  # degrés
-    # Latitude du terminateur
-    points = []
-    for lon in range(-180, 181, 2):
-        ha = math.radians(lon - hour_angle * (-1) + 180)
-        try:
-            lat = math.degrees(math.atan(-math.cos(ha) / math.tan(decl)))
-            points.append((lat, lon))
-        except:
-            pass
-    return points
-
 
 def get_solar_terminator_lats(n_points=180):
     """Retourne la latitude du terminateur solaire pour chaque longitude.
@@ -2770,22 +2751,6 @@ class StationMasterApp:
         ).fetchone()[0]
         return len(countries), len(waz_set), was_n
 
-    def _compute_was_grid(self):
-        """Construit la matrice état -> {bande: nb QSO} pour le tableau WAS détail."""
-        c = self.conn.cursor()
-        grid = {}
-        for state, band, n in c.execute(
-            "SELECT state, UPPER(band), COUNT(*) FROM qsos "
-            "WHERE state != '' GROUP BY state, UPPER(band)"
-        ):
-            state = state.upper()
-            if state not in US_STATES:
-                continue
-            band = band.lower()
-            if band not in WAS_BANDS:
-                continue
-            grid.setdefault(state, {b: 0 for b in WAS_BANDS})[band] = n
-        return grid
 
     def _refresh_dashboard(self):
         """Met à jour tous les widgets du dashboard."""
@@ -5062,7 +5027,6 @@ class StationMasterApp:
         """Dessine un graphique de prévision MUF/bandes selon SFI, calé sur le midi
         solaire local de la station (MY_GRID) — même position que le Greyline
         (_calc_greyline_times) et le VOACAP P2P (_open_voacap_p2p) juste à côté."""
-        from matplotlib.figure import Figure
 
         self._prop_fig.clear()
         ax = self._prop_fig.add_subplot(111)
@@ -5144,7 +5108,7 @@ class StationMasterApp:
     # ==========================================
 
     # Zones WAZ (CQ zones) : calculées depuis cty.dat via get_cq_zone(), voir _compute_award_stats
-    # WAS : colonne state (voir US_STATES/WAS_BANDS), _compute_award_stats / _compute_was_grid
+    # WAS : colonne state (voir US_STATES/WAS_BANDS), _compute_award_stats
 
 
     # ==========================================
@@ -5187,12 +5151,12 @@ class StationMasterApp:
 
             with open(fn, "w", encoding="utf-8") as f:
                 f.write(f"LoTW ADIF Export by {MY_CALL} Station Master\n")
-                f.write(f"<ADIF_VER:5>2.2.7 ")
+                f.write("<ADIF_VER:5>2.2.7 ")
                 f.write(
                     f"<CREATED_TIMESTAMP:{len(datetime.now().strftime('%Y%m%d %H%M%S'))}>{datetime.now().strftime('%Y%m%d %H%M%S')} "
                 )
-                f.write(f"<PROGRAMID:13>StationMaster ")
-                f.write(f"<EOH>\n\n")
+                f.write("<PROGRAMID:13>StationMaster ")
+                f.write("<EOH>\n\n")
 
                 def adif(tag, val):
                     val = str(val).strip() if val else ""
@@ -5688,355 +5652,6 @@ class StationMasterApp:
         self.heatmap_info_var.set(
             f"{total_qsos} QSOs • {total_pts} locators uniques • {n_ent} entités"
         )
-
-    # ==========================================
-    # --- CONTEST TIMER ---
-    # ==========================================
-    def _build_contest_tab(self, parent):
-        self._contest_running = False
-        self._contest_start = None
-        self._contest_qso_start = 0
-        self._contest_end_time = None
-
-        top = tk.Frame(parent, bg="#11273f")
-        top.pack(fill="x")
-        # Config contest
-        cfg = ttk.Labelframe(top, text="Configuration", bootstyle="warning", padding=10)
-        cfg.pack(side="left", fill="x", expand=True)
-        fields = tk.Frame(cfg, bg="#11273f")
-        fields.pack(fill="x")
-        ttk.Label(fields, text="Nom du contest:").grid(
-            row=0, column=0, sticky="e", padx=5, pady=3
-        )
-        self.contest_name_var = tk.StringVar(value="CQ WW SSB")
-        ttk.Combobox(
-            fields,
-            textvariable=self.contest_name_var,
-            values=[
-                "CQ WW SSB",
-                "CQ WW CW",
-                "CQ WW FT8",
-                "WAE SSB",
-                "WAE CW",
-                "IARU HF",
-                "King of Spain",
-                "UBA Contest",
-                "Autres",
-            ],
-            width=18,
-        ).grid(row=0, column=1, padx=5, pady=3)
-        ttk.Label(fields, text="Durée (heures):").grid(
-            row=0, column=2, sticky="e", padx=5
-        )
-        self.contest_dur_var = tk.StringVar(value="48")
-        ttk.Combobox(
-            fields,
-            textvariable=self.contest_dur_var,
-            values=["6", "8", "12", "24", "48"],
-            width=5,
-        ).grid(row=0, column=3, padx=5)
-        ttk.Label(fields, text="Objectif QSOs:").grid(
-            row=0, column=4, sticky="e", padx=5
-        )
-        self.contest_goal_var = tk.StringVar(value="500")
-        ttk.Entry(fields, textvariable=self.contest_goal_var, width=7).grid(
-            row=0, column=5, padx=5
-        )
-
-        # Panneau central - grands chiffres
-        center = tk.Frame(parent, bg="#11273f")
-        center.pack(fill="x")
-        self.contest_timer_var = tk.StringVar(value="00:00:00")
-        self.contest_remain_var = tk.StringVar(value="--:--:--")
-        ttk.Label(
-            center,
-            textvariable=self.contest_timer_var,
-            font=("Impact", 52),
-            foreground="#f39c12",
-        ).pack(side="left", padx=20)
-        mid_f = tk.Frame(center, bg="#11273f")
-        mid_f.pack(side="left", padx=20)
-        ttk.Label(
-            mid_f, text="TEMPS ÉCOULÉ", font=("Arial", 9), foreground="#888"
-        ).pack()
-        ttk.Label(
-            mid_f, text="TEMPS RESTANT", font=("Arial", 9), foreground="#888"
-        ).pack(pady=(15, 0))
-        ttk.Label(
-            mid_f,
-            textvariable=self.contest_remain_var,
-            font=("Impact", 24),
-            foreground="#3daee9",
-        ).pack()
-        # Stats QSOs
-        stats_f = tk.Frame(center, bg="#11273f")
-        stats_f.pack(side="left", padx=20)
-        self.contest_qsos_var = tk.StringVar(value="0")
-        self.contest_rate_var = tk.StringVar(value="0")
-        self.contest_rate1h_var = tk.StringVar(value="0")
-        ttk.Label(
-            stats_f, text="QSOs CONTEST", font=("Arial", 9), foreground="#888"
-        ).pack()
-        ttk.Label(
-            stats_f,
-            textvariable=self.contest_qsos_var,
-            font=("Impact", 42),
-            foreground="#3fb950",
-        ).pack()
-        rate_f = tk.Frame(stats_f, bg="#11273f")
-        rate_f.pack()
-        ttk.Label(
-            rate_f, text="Rate /h:", foreground="#aaa", font=("Consolas", 10)
-        ).pack(side="left")
-        ttk.Label(
-            rate_f,
-            textvariable=self.contest_rate_var,
-            font=("Consolas", 10, "bold"),
-            foreground="#3fb950",
-        ).pack(side="left", padx=5)
-        ttk.Label(
-            rate_f, text="  Dernière heure:", foreground="#aaa", font=("Consolas", 10)
-        ).pack(side="left")
-        ttk.Label(
-            rate_f,
-            textvariable=self.contest_rate1h_var,
-            font=("Consolas", 10, "bold"),
-            foreground="#3daee9",
-        ).pack(side="left", padx=5)
-        # Barre progression objectif
-        goal_f = tk.Frame(parent, bg="#11273f")
-        goal_f.pack(fill="x")
-        ttk.Label(
-            goal_f,
-            text="Progression vers objectif:",
-            font=("Arial", 9),
-            foreground="#aaa",
-        ).pack(anchor="w")
-        self.contest_pb = ttk.Progressbar(
-            goal_f, maximum=100, bootstyle="success-striped", length=600
-        )
-        self.contest_pb.pack(fill="x", pady=3)
-        self.contest_pb_lbl = ttk.Label(goal_f, text="0 / 500", foreground="white")
-        self.contest_pb_lbl.pack(anchor="w")
-
-        # Boutons
-        btn_f = tk.Frame(parent, bg="#11273f")
-        btn_f.pack(fill="x")
-        self.btn_contest_start = ttk.Button(
-            btn_f,
-            text="▶ DÉMARRER",
-            command=self._contest_start,
-            bootstyle="success",
-            width=16,
-        )
-        self.btn_contest_start.pack(side="left", padx=5)
-        ttk.Button(
-            btn_f,
-            text="⏸ PAUSE / REPRENDRE",
-            command=self._contest_pause,
-            bootstyle="warning",
-            width=20,
-        ).pack(side="left", padx=5)
-        ttk.Button(
-            btn_f,
-            text="⏹ ARRÊTER",
-            command=self._contest_stop,
-            bootstyle="danger",
-            width=14,
-        ).pack(side="left", padx=5)
-        ttk.Button(
-            btn_f,
-            text="📊 Rapport final",
-            command=self._contest_report,
-            bootstyle="info-outline",
-            width=16,
-        ).pack(side="left", padx=5)
-
-        # Log contest
-        ttk.Label(
-            parent,
-            text="Activité contest (QSOs depuis le démarrage) :",
-            foreground="#aaa",
-            font=("Arial", 9),
-        ).pack(anchor="w", padx=10)
-        cols = ("Heure", "Callsign", "Bande", "Mode", "RS Envoyé", "RS Reçu")
-        self.tree_contest = ttk.Treeview(
-            parent, columns=cols, show="headings", style="Custom.Treeview", height=8
-        )
-        for col in cols:
-            self.tree_contest.heading(col, text=col)
-            self.tree_contest.column(col, width=110, anchor="center")
-        sb = ttk.Scrollbar(parent, orient="vertical", command=self.tree_contest.yview)
-        self.tree_contest.configure(yscroll=sb.set)
-        sb.pack(side="right", fill="y")
-        self.tree_contest.pack(fill="both", expand=True, padx=5, pady=5)
-
-    def _contest_start(self):
-        if self._contest_running:
-            return
-        self._contest_running = True
-        self._contest_paused = False
-        self._contest_start = datetime.now(timezone.utc)
-        self._contest_end_time = None
-        try:
-            dur_h = float(self.contest_dur_var.get())
-            from datetime import timedelta
-
-            self._contest_deadline = self._contest_start + timedelta(hours=dur_h)
-        except:
-            self._contest_deadline = None
-        self._contest_qso_start = (
-            self.conn.cursor().execute("SELECT COUNT(*) FROM qsos").fetchone()[0]
-        )
-        self.status_var.set(f"⏱️ Contest démarré : {self.contest_name_var.get()}")
-        self.btn_contest_start.config(bootstyle="secondary")
-        self._contest_tick()
-        # Observer: charger les QSOs récents dans le tableau
-        self._contest_refresh_log()
-
-    def _contest_pause(self):
-        self._contest_paused = not getattr(self, "_contest_paused", False)
-        if self._contest_paused:
-            self._pause_time = datetime.now(timezone.utc)
-            self.status_var.set("⏸ Contest en pause")
-        else:
-            if hasattr(self, "_pause_time") and self._contest_start:
-                from datetime import timedelta
-
-                pause_dur = datetime.now(timezone.utc) - self._pause_time
-                self._contest_start += pause_dur
-                if self._contest_deadline:
-                    self._contest_deadline += pause_dur
-            self.status_var.set(f"▶ Contest repris : {self.contest_name_var.get()}")
-            self._contest_tick()
-
-    def _contest_stop(self):
-        self._contest_running = False
-        self._contest_end_time = datetime.now(timezone.utc)
-        self.status_var.set(f"⏹ Contest arrêté — {self.contest_name_var.get()}")
-        self.btn_contest_start.config(bootstyle="success")
-
-    def _contest_tick(self):
-        if not self._contest_running or getattr(self, "_contest_paused", False):
-            return
-        now = datetime.now(timezone.utc)
-        if self._contest_start:
-            elapsed = now - self._contest_start
-            h, rem = divmod(int(elapsed.total_seconds()), 3600)
-            m, s = divmod(rem, 60)
-            self.contest_timer_var.set(f"{h:02d}:{m:02d}:{s:02d}")
-            if self._contest_deadline:
-                remain = self._contest_deadline - now
-                if remain.total_seconds() > 0:
-                    rh, rrem = divmod(int(remain.total_seconds()), 3600)
-                    rm, rs = divmod(rrem, 60)
-                    self.contest_remain_var.set(f"{rh:02d}:{rm:02d}:{rs:02d}")
-                else:
-                    self.contest_remain_var.set("TERMINÉ")
-                    self._contest_stop()
-                    messagebox.showinfo("Contest", "⏱️ Temps écoulé ! Contest terminé.")
-                    return
-        # Stats QSOs
-        total_now = (
-            self.conn.cursor().execute("SELECT COUNT(*) FROM qsos").fetchone()[0]
-        )
-        contest_qsos = max(0, total_now - self._contest_qso_start)
-        self.contest_qsos_var.set(str(contest_qsos))
-        # Rate global
-        elapsed_h = elapsed.total_seconds() / 3600 if self._contest_start else 1
-        rate = int(contest_qsos / max(elapsed_h, 0.017))
-        self.contest_rate_var.set(str(rate))
-        # Rate dernière heure
-        one_h_ago = (now - __import__("datetime").timedelta(hours=1)).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        rate1h = (
-            self.conn.cursor()
-            .execute(
-                "SELECT COUNT(*) FROM qsos WHERE qso_date||' '||time_on >= ?",
-                (one_h_ago,),
-            )
-            .fetchone()[0]
-        )
-        self.contest_rate1h_var.set(str(rate1h))
-        # Progression
-        try:
-            goal = int(self.contest_goal_var.get())
-            pct = min(100, int(contest_qsos / goal * 100))
-            self.contest_pb["value"] = pct
-            self.contest_pb_lbl.config(text=f"{contest_qsos} / {goal}  ({pct}%)")
-        except:
-            pass
-        # Rafraîchir log toutes les 30 ticks
-        if int(elapsed.total_seconds()) % 30 == 0:
-            self._contest_refresh_log()
-        self.root.after(1000, self._contest_tick)
-
-    def _contest_refresh_log(self):
-        if not self._contest_start:
-            return
-        for item in self.tree_contest.get_children():
-            self.tree_contest.delete(item)
-        start_str = self._contest_start.strftime("%Y-%m-%d %H:%M")
-        rows = (
-            self.conn.cursor()
-            .execute(
-                "SELECT time_on, callsign, band, mode, rst_sent, rst_rcvd FROM qsos "
-                "WHERE qso_date||' '||time_on >= ? ORDER BY qso_date DESC, time_on DESC LIMIT 50",
-                (start_str,),
-            )
-            .fetchall()
-        )
-        for row in rows:
-            self.tree_contest.insert("", "end", values=row)
-
-    def _contest_report(self):
-        if not self._contest_start:
-            messagebox.showinfo("Contest", "Démarrez d'abord un contest.")
-            return
-        now = self._contest_end_time or datetime.now(timezone.utc)
-        elapsed = now - self._contest_start
-        h, rem = divmod(int(elapsed.total_seconds()), 3600)
-        m, s = divmod(rem, 60)
-        total_now = (
-            self.conn.cursor().execute("SELECT COUNT(*) FROM qsos").fetchone()[0]
-        )
-        contest_qsos = max(0, total_now - self._contest_qso_start)
-        elapsed_h = elapsed.total_seconds() / 3600
-        rate = int(contest_qsos / max(elapsed_h, 0.017))
-        c = self.conn.cursor()
-        start_str = self._contest_start.strftime("%Y-%m-%d %H:%M")
-        bands = c.execute(
-            "SELECT band, COUNT(*) FROM qsos WHERE qso_date||' '||time_on >= ? GROUP BY band ORDER BY COUNT(*) DESC",
-            (start_str,),
-        ).fetchall()
-        modes = c.execute(
-            "SELECT mode, COUNT(*) FROM qsos WHERE qso_date||' '||time_on >= ? GROUP BY mode ORDER BY COUNT(*) DESC",
-            (start_str,),
-        ).fetchall()
-        msg = (
-            f"=== RAPPORT CONTEST : {self.contest_name_var.get()} ===\n\n"
-            f"Début : {self._contest_start.strftime('%Y-%m-%d %H:%M UTC')}\n"
-            f"Fin   : {now.strftime('%Y-%m-%d %H:%M UTC')}\n"
-            f"Durée : {h:02d}h{m:02d}\n\n"
-            f"QSOs totaux  : {contest_qsos}\n"
-            f"Rate moyen   : {rate} QSO/h\n\n"
-            f"Par bande:\n"
-            + "\n".join(f"  {b[0]}: {b[1]}" for b in bands)
-            + f"\n\nPar mode:\n"
-            + "\n".join(f"  {m2[0]}: {m2[1]}" for m2 in modes)
-        )
-        win = tk.Toplevel(self.root)
-        win.title("Rapport Contest")
-        win.geometry("420x400")
-        txt = tk.Text(
-            win, font=("Consolas", 10), bg="#11273f", fg="white", padx=15, pady=10
-        )
-        txt.pack(fill="both", expand=True)
-        txt.insert("1.0", msg)
-        ttk.Button(
-            win, text="✖ Fermer", command=win.destroy, bootstyle="secondary"
-        ).pack(pady=5)
 
     # ==========================================
     # --- QSL CARD DESIGNER ---
@@ -9304,8 +8919,6 @@ class StationMasterApp:
                     f"{state.filter_lo} / {state.filter_hi} Hz"
                 )
 
-    def _flex_update_bar(self, key, value, label_text=""):
-        pass  # Toutes les barres sont gérées directement dans _flex_on_update
 
     def _flex_set_freq(self, freq_mhz):
         if self._flex_client and self._flex_client.state.connected:
@@ -9435,11 +9048,11 @@ def ask_backup_dir_first_time():
 
     result = messagebox.askyesno(
         "🗂️ Configuration du dossier de backup",
-        f"Bienvenue dans Station Master V21.0 !\n\n"
-        f"Aucun dossier de backup n'est encore configuré.\n\n"
-        f"Voulez-vous choisir maintenant le dossier où\n"
-        f"vos sauvegardes seront enregistrées à la fermeture ?\n\n"
-        f"(Vous pourrez le modifier plus tard dans ⚙️ Paramètres)",
+        "Bienvenue dans Station Master V21.0 !\n\n"
+        "Aucun dossier de backup n'est encore configuré.\n\n"
+        "Voulez-vous choisir maintenant le dossier où\n"
+        "vos sauvegardes seront enregistrées à la fermeture ?\n\n"
+        "(Vous pourrez le modifier plus tard dans ⚙️ Paramètres)",
         icon="question",
     )
 

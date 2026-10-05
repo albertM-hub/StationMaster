@@ -1,7 +1,7 @@
 """tab_qsl.py — QSL email : JPEG→PDF overlay, QRZ lookup, SMTP Gmail SSL.
 Importé par station_master.py : QSLEmailer(app).send_dialog()
 """
-import os, io, threading, tempfile, sqlite3, ssl, smtplib
+import os, threading, tempfile, ssl, smtplib
 import xml.etree.ElementTree as ET
 import tkinter as tk
 import ttkbootstrap as ttk

@@ -2839,6 +2839,20 @@ class StationMasterApp:
         return len(countries), len(waz_set), was_n
 
 
+    def _update_band_tile(self):
+        """Tuile « Bande active » du Dashboard, depuis self.current_freq_hz."""
+        if not hasattr(self, "dash_band_var"):
+            return
+        try:
+            freq_hz = float(self.current_freq_hz)
+            band = freq_to_band(str(freq_hz))
+            freq_mhz = f"{freq_hz/1e6:.3f} MHz"
+        except:
+            band = "---"
+            freq_mhz = "--- MHz"
+        self.dash_band_var.set(band)
+        self.dash_freq_var.set(freq_mhz)
+
     def _refresh_dashboard(self):
         """Met à jour tous les widgets du dashboard."""
         try:
@@ -2878,16 +2892,8 @@ class StationMasterApp:
             self.dash_dxcc_var.set(str(len(countries)))
             self.dash_dxcc_conf_var.set(f"{len(conf_entities)} confirmés")
 
-            # Bande active (depuis CAT)
-            try:
-                freq_hz = float(self.current_freq_hz)
-                band = freq_to_band(str(freq_hz))
-                freq_mhz = f"{freq_hz/1e6:.3f} MHz"
-            except:
-                band = "---"
-                freq_mhz = "--- MHz"
-            self.dash_band_var.set(band)
-            self.dash_freq_var.set(freq_mhz)
+            # Bande active (CAT, Flex, raccourcis F1-F7, clic sur un spot)
+            self._update_band_tile()
 
             # Propagation résumé
             solar_txt = self.solar_var.get()
@@ -8974,6 +8980,17 @@ class StationMasterApp:
         fg_freq = "#ff4444" if state.tx_active else "#e6edf3"
         self._flex_freq_var.set(freq_str)
         self._flex_freq_lbl.config(fg=fg_freq)
+
+        # Fréquence du Flex → current_freq_hz (tuile Bande active, saisie
+        # manuelle d'un QSO). Seulement Flex connecté, fréquence valide, et
+        # quand elle change : un clic sur un spot ou F1-F7 n'est pas écrasé
+        # par les mises à jour de mesures (≈ 20 par seconde).
+        if state.connected and state.frequency > 0:
+            hz = str(int(round(state.frequency * 1e6)))
+            if hz != getattr(self, "_flex_last_hz", None):
+                self._flex_last_hz = hz
+                self.current_freq_hz = hz
+                self._update_band_tile()
 
         # ── Mise à jour du label "RADIO OFF/ON AIR" en haut de fenêtre ────────
         try:

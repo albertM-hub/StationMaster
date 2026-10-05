@@ -266,7 +266,8 @@ class TabGrayline:
             draw.line(term_px, fill=(255, 200, 50, 230), width=2)
 
         # ── Point sub-solaire ─────────────────────────────────────────────────
-        sx, sy = self._ll2xy(decl, sub_lon % 360 - 180, w, h)
+        # Longitude ramenée dans [-180, 180[ (l'ancien « % 360 - 180 » décalait de 180°)
+        sx, sy = self._ll2xy(decl, (sub_lon + 180) % 360 - 180, w, h)
         draw.ellipse([sx-7, sy-7, sx+7, sy+7], fill=(255, 240, 0, 210))
         draw.ellipse([sx-10, sy-10, sx+10, sy+10],
                      outline=(255, 240, 0, 120), width=1)

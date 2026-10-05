@@ -737,7 +737,7 @@ def wiki_qsl():
 
 def wiki_cat():
     return [
-        ("h1", "  📻 Contrôle CAT & Mémoires fréquences"),
+        ("h1", "  📻 Contrôle CAT"),
         ("", ""),
         ("h2", "  Protocole CAT"),
         (
@@ -762,13 +762,10 @@ def wiki_cat():
         ("", "  • S-Meter : barre de progression en temps réel"),
         ("", "  • TX Status : indicateur 🔥 ON AIR lors de l'émission"),
         ("", ""),
-        ("h2", "  Mémoires fréquences"),
-        ("", "  Onglet 📻 Mémoires :"),
-        ("", "  • 24 mémoires prédéfinies (FT8/SSB/CW toutes bandes)"),
-        ("", "  • Clic sur un bouton = accord immédiat du transceiver via CAT"),
-        ("", "  • Couleurs : 🟢 FT8/FT4  🔵 SSB  🟡 CW  🟣 DIG  🩵 FM"),
-        ("", "  • Ajout de mémoires personnalisées via le formulaire en haut"),
-        ("", "  • Stockées dans la base SQLite → persistantes entre sessions"),
+        (
+            "tip",
+            "  💡 En FT8, c'est Decodium qui règle la fréquence du transceiver",
+        ),
     ]
 
 

@@ -443,7 +443,7 @@ MY_CALL = "N0CALL"
 # Identité affichée sur l'aperçu QSL : clés facultatives [USER] Name, City,
 # Region, Country de config.ini ; valeurs d'origine en secours.
 MY_NAME, MY_CITY, MY_REGION, MY_COUNTRY = "Albert", "Ans", "Wallonie", "Belgique"
-CAT_PORT = "COM4"
+CAT_PORT = ""  # vide : aucun port CAT tant qu'il n'est pas choisi dans ⚙️ Paramètres
 CAT_BAUD = 9600
 CONF = None
 # Dossier de backup : [BACKUP] Dir de config.ini ; vide → Backups/ à côté du programme
@@ -461,7 +461,7 @@ def load_config_safe():
     config = configparser.ConfigParser()
     DEFAULTS = {
         "USER": {"Callsign": "N0CALL", "Grid": "AA00AA"},
-        "CAT": {"Port": "/dev/ttyUSB0" if os.name != "nt" else "COM4", "Baud": "9600"},
+        "CAT": {"Port": "", "Baud": "9600"},
         "API": {
             "QRZ_User": "",
             "QRZ_Pass": "",
@@ -526,7 +526,7 @@ def load_config_safe():
         MY_CITY = config.get("USER", "City", fallback="").strip() or MY_CITY
         MY_REGION = config.get("USER", "Region", fallback="").strip() or MY_REGION
         MY_COUNTRY = config.get("USER", "Country", fallback="").strip() or MY_COUNTRY
-        CAT_PORT = config.get("CAT", "Port", fallback="COM4")
+        CAT_PORT = config.get("CAT", "Port", fallback="").strip()
         CAT_BAUD = config.getint("CAT", "Baud", fallback=9600)
         BACKUP_DIR = config.get("BACKUP", "Dir", fallback="")
         CONF = config
@@ -901,6 +901,10 @@ class RadioCAT(threading.Thread):
         self.ser = None
 
     def run(self):
+        if not self.port:
+            # Aucun port CAT configuré : pas de tentative ni de boucle de reconnexion
+            print("[CAT] Aucun port configuré (⚙️ Paramètres) — CAT inactif")
+            return
         while self.running:
             try:
                 if self.ser is None or not self.ser.is_open:

@@ -1913,10 +1913,11 @@ class StationMasterApp:
 
     def _load_spe_config(self):
         """Lit le port et baudrate SPE Expert depuis config.ini."""
-        self._spe_port = "/dev/ttyUSB1"
+        # Vide par défaut : pas de connexion tant qu'aucun port n'est configuré
+        self._spe_port = ""
         self._spe_baud = 115200
         if CONF and CONF.has_section("SPE"):
-            self._spe_port = CONF.get("SPE", "port", fallback="/dev/ttyUSB1").strip()
+            self._spe_port = CONF.get("SPE", "port", fallback="").strip()
             self._spe_baud = int(CONF.get("SPE", "baudrate", fallback="115200"))
 
     def _start_udp_threads(self):

@@ -250,7 +250,7 @@ class QSLEmailTab:
             messagebox.showerror("Config email",
                 "Identifiants SMTP manquants.\n\n"
                 "Ajoutez dans config.ini :\n\n"
-                "[GMAIL]\nemail = on5amplus@gmail.com\n"
+                "[GMAIL]\nemail = votre.adresse@gmail.com\n"
                 "app_password = xxxx xxxx xxxx xxxx")
             return
 

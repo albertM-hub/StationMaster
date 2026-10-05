@@ -483,7 +483,7 @@ def load_config_safe():
             "MulticastIP": "224.0.0.1",
         },
         "EMAIL": {
-            "smtp_user": "on5amplus@gmail.com",
+            "smtp_user": "",
             "smtp_password": "",
             "smtp_host": "smtp.gmail.com",
             "smtp_port": "587",

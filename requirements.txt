@@ -1,9 +1,16 @@
-Pillow==12.1.1
-requests==2.32.5
-pyserial==3.5
-tkintermapview==1.29
-ttkbootstrap==1.20.2
-matplotlib==3.10.9
-numpy==2.4.4
-reportlab==4.5.0
-skyfield==1.54
+# Station Master — dépendances Python
+# Python 3.10 minimum (testé avec Python 3.10 et 3.14)
+# Installation : pip install -r requirements.txt
+# Linux : tkinter vient du système → sudo apt install python3-tk python3-pil.imagetk
+
+ttkbootstrap>=1.10        # interface (thème sombre)
+tkintermapview>=1.29      # cartes (Carte Live, DX Live)
+requests>=2.31            # QRZ, eQSL, Club Log, propagation, cty.dat
+pyserial>=3.5             # CAT et ampli SPE Expert (port série)
+matplotlib>=3.7           # graphiques, propagation, Logbook Analysis (installe numpy)
+Pillow>=10.0              # Heatmap, Grayline, cartes QSL, photos QRZ
+reportlab>=4.0            # cartes QSL et rapport en PDF
+skyfield>=1.46            # onglet Satellites
+
+# Optionnel, Windows seulement : notifications système
+win10toast>=0.9; sys_platform == "win32"

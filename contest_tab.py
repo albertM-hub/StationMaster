@@ -8,7 +8,12 @@ Usage  : from contest_tab import ContestTab
 
 import tkinter as tk
 from tkinter import ttk
+import os
+import queue
+import socket
+import sys
 import threading
+import urllib.error
 import webbrowser
 import xml.etree.ElementTree as ET
 import urllib.request
@@ -39,6 +44,31 @@ FONT_HEADER  = ("Consolas", 10, "bold")
 
 # ── URL du flux RSS ─────────────────────────────────────────────────────────
 RSS_URL = "https://www.contestcalendar.com/calendar.rss"
+RSS_TIMEOUT = 15  # secondes (connexion et lecture)
+
+# Copie locale de la dernière réponse valide, réutilisée si le site est injoignable.
+# Même dossier que station_master.py (ou que l'exécutable PyInstaller).
+_APP_DIR = (
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.abspath(__file__))
+)
+RSS_CACHE = os.path.join(_APP_DIR, "contest_cache.rss")
+
+
+def _explain_error(exc):
+    """Traduit une exception réseau en message court et lisible."""
+    if isinstance(exc, (socket.timeout, TimeoutError)):
+        return f"pas de réponse en {RSS_TIMEOUT} s"
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"erreur du serveur (HTTP {exc.code})"
+    if isinstance(exc, urllib.error.URLError):
+        if isinstance(exc.reason, (socket.timeout, TimeoutError)):
+            return f"pas de réponse en {RSS_TIMEOUT} s"
+        return "site injoignable (connexion internet ou site hors service)"
+    if isinstance(exc, ET.ParseError):
+        return "réponse du site illisible"
+    return str(exc) or exc.__class__.__name__
 
 # ── Mots-clés de détection des modes ───────────────────────────────────────
 MODE_KEYWORDS = {
@@ -122,6 +152,9 @@ class ContestTab:
         self._all_contests: list[dict] = []
         self._active_modes: set[str]   = set()   # vide = tout afficher
         self._loading = False
+        # Le thread réseau dépose son résultat ici ; seul le thread Tk le lit
+        # (appeler after() depuis un autre thread échoue sous Python 3.14).
+        self._result_q: queue.Queue = queue.Queue()
 
         self._build_ui(self.parent)
         self._refresh()
@@ -290,32 +323,71 @@ class ContestTab:
             if w != self._status_lbl:
                 w.destroy()
         threading.Thread(target=self._fetch_rss, daemon=True).start()
+        self.frame.after(200, self._poll_result)
 
     def _fetch_rss(self):
+        """Thread réseau : télécharge le flux, sinon se rabat sur la copie locale."""
         try:
             req = urllib.request.Request(
                 RSS_URL,
                 headers={"User-Agent": "Station Master / ON5AM contest-tab 1.0"}
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                xml_bytes = resp.read()
-            contests = parse_rss(xml_bytes.decode("utf-8", errors="replace"))
-            self.frame.after(0, self._on_rss_loaded, contests, None)
+            with urllib.request.urlopen(req, timeout=RSS_TIMEOUT) as resp:
+                xml_text = resp.read().decode("utf-8", errors="replace")
+            contests = parse_rss(xml_text)
+            if not contests:
+                raise ValueError("flux vide")
+            try:
+                with open(RSS_CACHE, "w", encoding="utf-8") as f:
+                    f.write(xml_text)
+            except OSError as exc:
+                print(f"[Contests] Copie locale non écrite : {exc}")
+            self._result_q.put((contests, None, None))
         except Exception as exc:
-            self.frame.after(0, self._on_rss_loaded, [], str(exc))
+            reason = _explain_error(exc)
+            print(f"[Contests] Échec WA7BNM : {exc!r}")
+            cached, cache_date = self._load_cache()
+            self._result_q.put((cached, reason, cache_date))
 
-    def _on_rss_loaded(self, contests: list[dict], error: str | None):
+    @staticmethod
+    def _load_cache():
+        """Lit la copie locale. Retourne (contests, date lisible) ou ([], None)."""
+        try:
+            with open(RSS_CACHE, encoding="utf-8") as f:
+                contests = parse_rss(f.read())
+            when = datetime.fromtimestamp(os.path.getmtime(RSS_CACHE))
+            return contests, when.strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            return [], None
+
+    def _poll_result(self):
+        """Thread Tk : attend le résultat du thread réseau sans bloquer l'interface."""
+        try:
+            contests, error, cache_date = self._result_q.get_nowait()
+        except queue.Empty:
+            self.frame.after(200, self._poll_result)
+            return
+        self._on_rss_loaded(contests, error, cache_date)
+
+    def _on_rss_loaded(self, contests: list[dict], error: str | None,
+                       cache_date: str | None = None):
         self._loading = False
         self._btn_refresh.config(state="normal", text="⟳  Refresh")
-        if error:
-            self._status_var.set(f"❌  Erreur : {error}")
-            return
-        if not contests:
-            self._status_var.set("Aucun contest trouvé dans le flux RSS.")
+        if error and not contests:
+            self._status_var.set(
+                f"❌  Calendrier WA7BNM indisponible : {error}.\n"
+                "Aucune copie locale. Réessayez plus tard avec ⟳ Refresh."
+            )
             return
         self._all_contests = contests
         self._status_var.set("")
         self._render_contests()
+        if error:
+            # Affiché après le rendu, qui efface le message de statut
+            self._status_var.set(
+                f"⚠️  WA7BNM indisponible : {error}.\n"
+                f"Affichage de la copie locale du {cache_date}."
+            )
 
     # ── Rendu de la liste ──────────────────────────────────────────────────
 

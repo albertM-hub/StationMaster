@@ -13,6 +13,7 @@ mon_logbook.db
 # Données téléchargées automatiquement au runtime
 cty.dat
 world_map_grayline.jpg
+contest_cache.rss
 
 # PyInstaller
 build/

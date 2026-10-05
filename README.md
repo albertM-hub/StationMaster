@@ -16,7 +16,7 @@
 
 **Station Master** est un logbook radio amateur complet écrit en Python (Tkinter / ttkbootstrap), base SQLite. Il gère le journal de trafic, les confirmations QSL, les diplômes, la propagation et le matériel de la station (FlexRadio, ampli SPE Expert). Les QSO FT8 arrivent automatiquement depuis **Decodium** (ou WSJT-X) par UDP.
 
-Développé et utilisé au quotidien sous Linux (Kubuntu) ; le code prend aussi en charge Windows.
+Développé et testé uniquement sous Linux (Ubuntu/Kubuntu), avec Python 3.10 et 3.14. Windows et macOS : non testés.
 
 ### 🗂️ Les onglets
 
@@ -58,7 +58,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 📥 Installation — Windows
+### 📥 Installation — Windows (non testé)
 
 Installez Python 3.10+ depuis [python.org](https://www.python.org/downloads/) (tkinter est inclus), puis dans une invite de commandes :
 
@@ -78,7 +78,7 @@ python3 station_master.py
 ```
 
 ```bat
-:: Windows (environnement virtuel activé)
+:: Windows (environnement virtuel activé) — non testé
 py station_master.py
 ```
 
@@ -151,7 +151,7 @@ Ouvrez ensuite une Pull Request.
 
 **Station Master** is a full-featured ham radio logbook written in Python (Tkinter / ttkbootstrap) with an SQLite database. It handles the QSO log, QSL confirmations, awards, propagation and station hardware (FlexRadio, SPE Expert amplifier). FT8 QSOs are received automatically from **Decodium** (or WSJT-X) over UDP.
 
-Developed and used daily on Linux (Kubuntu); the code also supports Windows. The user interface is in French.
+Developed and tested on Linux only (Ubuntu/Kubuntu), with Python 3.10 and 3.14. Windows and macOS: untested. The user interface is in French.
 
 ### 🗂️ Tabs
 
@@ -174,7 +174,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 📥 Installation — Windows
+### 📥 Installation — Windows (untested)
 
 Install Python 3.10+ from [python.org](https://www.python.org/downloads/), then:
 
@@ -190,7 +190,7 @@ pip install -r requirements.txt
 
 ```bash
 python3 station_master.py      # Linux
-py station_master.py           # Windows
+py station_master.py           # Windows (untested)
 ```
 
 It can be started from any directory: `config.ini`, the `station_master.db` database, `cty.dat` and the greyline map are created next to `station_master.py` on first launch. Then open **⚙️ Paramètres** to enter your callsign, locator, CAT port and service credentials. `config.ini` holds your passwords: never publish it (it is git-ignored).

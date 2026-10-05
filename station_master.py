@@ -1394,7 +1394,7 @@ class QRZLogbookManager:
                 f"<TIME_ON:{len(time_adif)}>{time_adif}"
                 f"<RST_SENT:{len(str(rst_s))}>{rst_s}"
                 f"<RST_RCVD:{len(str(rst_r))}>{rst_r}"
-                f"<STATION_CALLSIGN:5>ON5AM<EOR>"
+                f"<STATION_CALLSIGN:{len(MY_CALL)}>{MY_CALL}<EOR>"
             )
             r = requests.post(
                 self.API_URL,

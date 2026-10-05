@@ -964,6 +964,7 @@ class ClusterThread(threading.Thread):
         self.running = True
         self.daemon = True
         self._sock = None
+        self.connected = False  # état réel, lu par l'indicateur de DX Live
 
     def run(self):
         while self.running:
@@ -971,6 +972,7 @@ class ClusterThread(threading.Thread):
                 self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self._sock.settimeout(20)
                 self._sock.connect((self.host, self.port))
+                self.connected = True
                 self._sock.settimeout(2)
                 buf = ""
                 logged = False
@@ -1023,6 +1025,7 @@ class ClusterThread(threading.Thread):
             except Exception as e:
                 print(f"[Cluster/{self.source}] {e}")
             finally:
+                self.connected = False
                 if self._sock:
                     try:
                         self._sock.close()
@@ -1839,6 +1842,19 @@ class StationMasterApp:
         # Variables dashboard (mise à jour périodique)
         self.root.after(2000, self._refresh_dashboard)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _reconnect_cluster(self, host, port):
+        """Reconnecte le DX Cluster sur host:port (bouton « Connecter » de DX Live).
+        Valable pour la session : config.ini n'est pas modifié."""
+        ancien = getattr(self, "cluster", None)
+        if ancien is not None:
+            ancien.stop()
+        call = CONF.get("CLUSTER", "Call", fallback=MY_CALL) if CONF else MY_CALL
+        self.cluster = ClusterThread(
+            host, port, call, self.on_cluster_spot, source="Cluster"
+        )
+        self.cluster.daemon = True
+        self.cluster.start()
 
     def _load_cluster_filters(self):
         if CONF:

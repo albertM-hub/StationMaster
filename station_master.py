@@ -434,8 +434,9 @@ def get_continent(callsign):
 
 
 # --- GLOBALS ---
-MY_GRID = "JO20SP"
-MY_CALL = "ON5AM"
+# Valeurs neutres tant que config.ini n'est pas lu (indicatif à saisir dans ⚙️ Paramètres)
+MY_GRID = "AA00AA"
+MY_CALL = "N0CALL"
 CAT_PORT = "COM4"
 CAT_BAUD = 9600
 CONF = None
@@ -451,30 +452,30 @@ def load_config_safe():
     global CONF, MY_GRID, MY_CALL, CAT_PORT, CAT_BAUD, BACKUP_DIR
     config = configparser.ConfigParser()
     DEFAULTS = {
-        "USER": {"Callsign": "ON5AM", "Grid": "JO20SP"},
+        "USER": {"Callsign": "N0CALL", "Grid": "AA00AA"},
         "CAT": {"Port": "/dev/ttyUSB0" if os.name != "nt" else "COM4", "Baud": "9600"},
         "API": {
-            "QRZ_User": "ON5AM",
+            "QRZ_User": "",
             "QRZ_Pass": "",
             "QRZ_Key": "",
             "QRZ_Log_Key": "",
-            "EQSL_User": "ON5AM",
+            "EQSL_User": "",
             "EQSL_Pass": "",
             "Club_Email": "",
             "Club_Pass": "",
-            "Club_Call": "ON5AM",
+            "Club_Call": "N0CALL",
             "Club_Key": "",
         },
-        "CLUSTER": {"Host": "on0dxk.dyndns.org", "Port": "8000", "Call": "ON5AM"},
+        "CLUSTER": {"Host": "on0dxk.dyndns.org", "Port": "8000", "Call": "N0CALL"},
         "DXCC": {"Alert_Bands": "20m,15m,10m", "Alert_Countries": ""},
         "LOTW": {
-            "Callsign": "ON5AM",
+            "Callsign": "N0CALL",
             "Tqsl_Path": (
                 "tqsl"
                 if os.name != "nt"
                 else "C:\\Program Files (x86)\\TrustedQSL\\tqsl.exe"
             ),
-            "User": "ON5AM",
+            "User": "",
             "Pass": "",
         },
         "BACKUP": {"Dir": ""},
@@ -510,8 +511,8 @@ def load_config_safe():
         if changed:
             with open(CONFIG_FILE, "w") as f:
                 config.write(f)
-        MY_GRID = config.get("USER", "Grid", fallback="JO20SP")
-        MY_CALL = config.get("USER", "Callsign", fallback="ON5AM")
+        MY_GRID = config.get("USER", "Grid", fallback="AA00AA")
+        MY_CALL = config.get("USER", "Callsign", fallback="N0CALL")
         CAT_PORT = config.get("CAT", "Port", fallback="COM4")
         CAT_BAUD = config.getint("CAT", "Baud", fallback=9600)
         BACKUP_DIR = config.get("BACKUP", "Dir", fallback="")
@@ -9091,6 +9092,10 @@ def ask_backup_dir_first_time():
 
 
 if __name__ == "__main__":
+    # Les onglets externes font « import station_master » pour lire MY_GRID, CONF…
+    # Sans cette ligne, Python rechargerait une 2e copie du fichier, avec les
+    # valeurs par défaut (N0CALL/AA00AA) au lieu de celles de config.ini.
+    sys.modules["station_master"] = sys.modules["__main__"]
     if load_config_safe():
         try:
             ask_backup_dir_first_time()

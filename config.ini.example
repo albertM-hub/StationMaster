@@ -1,6 +1,6 @@
 [USER]
-callsign = YOURCALL
-grid = JO20AA
+callsign = N0CALL
+grid = AA00AA
 
 [CAT]
 port = /dev/ttyUSB0
@@ -15,20 +15,20 @@ eqsl_user =
 eqsl_pass =
 club_email =
 club_pass =
-club_call = YOURCALL
+club_call = N0CALL
 club_key =
 
 [CLUSTER]
 host = on0dxk.dyndns.org
 port = 8000
-call = YOURCALL
+call = N0CALL
 
 [DXCC]
 alert_bands = 20m,15m,10m
 alert_countries =
 
 [LOTW]
-callsign = YOURCALL
+callsign = N0CALL
 tqsl_path = /usr/bin/tqsl
 user =
 pass =

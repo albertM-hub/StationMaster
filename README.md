@@ -101,12 +101,14 @@ cp config.ini.example config.ini
 Dans Decodium → **Settings → Reporting** :
 
 ```
-UDP Server    : 224.0.0.1
-Port          : 2237
+UDP Server    : 224.0.0.1      Port : 2237
 ✅ Accept UDP requests
+✅ N1MM Logger+ Broadcasts : 127.0.0.1      Port : 2333
 ```
 
-Chaque QSO validé dans Decodium arrive dans le Journal. Le bandeau en haut à droite affiche `RX: Decodium UDP 2237`.
+Chaque QSO validé dans Decodium (Log QSO → OK) arrive dans le Journal, par l'ADIF du port 2333 ou par le port 2237, sans doublon. Le bandeau en haut à droite affiche `RX: Decodium UDP 2237 + ADIF 2333`.
+
+> Sous Linux, le multicast 224.0.0.1 sur l'interface `lo` n'aboutit souvent pas : le port 2333 suffit.
 
 ### 📦 Exécutable Linux
 
@@ -193,7 +195,7 @@ It can be started from any directory: `config.ini`, the `station_master.db` data
 
 ### 📡 FT8 QSOs (Decodium or WSJT-X)
 
-Settings → Reporting → UDP Server `224.0.0.1`, port `2237`, ✅ Accept UDP requests.
+Settings → Reporting → UDP Server `224.0.0.1`, port `2237`, ✅ Accept UDP requests, and ✅ N1MM Logger+ Broadcasts to `127.0.0.1`, port `2333` (the most reliable path on Linux). A QSO received on both ports is stored once.
 
 ### 📦 Linux executable
 

@@ -99,36 +99,37 @@ class TabDXUnified(tk.Frame):
 
         # Pré-remplir avec la config actuelle de l'app si disponible
         self._load_current_config()
+        self._refresh_conn_state()
 
     def _load_current_config(self):
-        """Lit la config actuelle de l'app pour pré-remplir les champs."""
+        """Pré-remplit host/port avec la section [CLUSTER] de config.ini."""
         try:
-            from configparser import ConfigParser
-            import os
-            cfg_file = next(
-                (f for f in ["config.ini", "mon_logbook.ini", "station_master.ini"]
-                 if os.path.exists(f)), None)
-            if cfg_file:
-                cfg = ConfigParser()
-                cfg.read(cfg_file)
-                host = cfg.get("DX_CLUSTER", "Host", fallback="")
-                port = cfg.get("DX_CLUSTER", "Port", fallback="")
+            import station_master as _sm
+            if _sm.CONF and _sm.CONF.has_section("CLUSTER"):
+                host = _sm.CONF.get("CLUSTER", "Host", fallback="").strip()
+                port = _sm.CONF.get("CLUSTER", "Port", fallback="").strip()
                 if host:
                     self._host_var.set(host)
+                    for sname, shost, sport in SERVERS:
+                        if shost == host:
+                            self._srv_var.set(sname)
+                            break
                 if port:
                     self._port_var.set(port)
         except Exception:
             pass
 
-        # Essaie aussi depuis les attributs de l'app
-        for attr_h, attr_p in [("cluster_host","cluster_port"),
-                                ("dx_host","dx_port"),
-                                ("_cluster_host","_cluster_port")]:
-            if hasattr(self.app, attr_h):
-                self._host_var.set(getattr(self.app, attr_h))
-                if hasattr(self.app, attr_p):
-                    self._port_var.set(str(getattr(self.app, attr_p)))
-                break
+    def _refresh_conn_state(self):
+        """Indicateur : état réel du thread cluster de l'app, relu toutes les 2 s."""
+        cl = getattr(self.app, "cluster", None)
+        if cl is None:
+            txt, fg = "⬤ Déconnecté", "#f44336"
+        elif getattr(cl, "connected", False):
+            txt, fg = f"⬤ {cl.host}:{cl.port} — connecté", "#3fb950"
+        else:
+            txt, fg = f"⬤ {cl.host}:{cl.port} — connexion…", "#f39c12"
+        self._conn_lbl.config(text=txt, fg=fg)
+        self.after(2000, self._refresh_conn_state)
 
     def _on_server_select(self, event=None):
         """Met à jour host/port quand on choisit un serveur préconfiguré."""
@@ -150,40 +151,13 @@ class TabDXUnified(tk.Frame):
         if not host:
             return
 
-        # Met à jour les attributs de l'app
-        for attr in ["cluster_host", "dx_host", "_cluster_host"]:
-            if hasattr(self.app, attr):
-                setattr(self.app, attr, host)
-        for attr in ["cluster_port", "dx_port", "_cluster_port"]:
-            if hasattr(self.app, attr):
-                setattr(self.app, attr, port)
-
-        # Appelle la méthode de reconnexion si elle existe
-        reconnected = False
-        for method in ["_reconnect_cluster", "reconnect_cluster",
-                       "_cluster_reconnect", "cluster_connect",
-                       "_connect_cluster"]:
-            if hasattr(self.app, method):
-                try:
-                    getattr(self.app, method)(host, port)
-                    reconnected = True
-                    break
-                except TypeError:
-                    try:
-                        getattr(self.app, method)()
-                        reconnected = True
-                        break
-                    except Exception:
-                        pass
-                except Exception as e:
-                    print(f"[TabDXUnified] {method}: {e}")
-
-        if reconnected:
-            self._conn_lbl.config(text=f"⬤ {host}:{port}", fg="#3fb950")
-        else:
-            self._conn_lbl.config(
-                text=f"⬤ {host}:{port} (reconnexion manuelle)",
-                fg="#f39c12")
+        # L'indicateur suit ensuite l'état réel (_refresh_conn_state)
+        try:
+            self.app._reconnect_cluster(host, port)
+            self._conn_lbl.config(text=f"⬤ {host}:{port} — connexion…", fg="#f39c12")
+        except Exception as e:
+            print(f"[TabDXUnified] reconnexion : {e}")
+            self._conn_lbl.config(text=f"⬤ {host}:{port} — échec", fg="#f44336")
 
     def _build_panels(self):
         """Crée le split PanedWindow cluster | DXpéditions."""

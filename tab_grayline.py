@@ -17,10 +17,39 @@ import urllib.request
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageTk
 
-# ── Constantes QTH ────────────────────────────────────────────────────────────
+# ── Constantes QTH (secours si MY_GRID / MY_CALL ne sont pas lisibles) ───────
 QTH_LAT =  50.655   # Ans, Belgique
 QTH_LON =   5.548
 QTH_CALL = "ON5AM"
+
+
+def _locator_latlon(grid):
+    """Centre d'un locator Maidenhead (4 ou 6 caractères) → (lat, lon), ou None."""
+    g = (grid or "").strip().upper()
+    try:
+        lon = (ord(g[0]) - 65) * 20 - 180 + int(g[2]) * 2
+        lat = (ord(g[1]) - 65) * 10 - 90 + int(g[3])
+        if len(g) >= 6 and "A" <= g[4] <= "X" and "A" <= g[5] <= "X":
+            return (lat + (ord(g[5]) - 65) * 2.5 / 60 + 1.25 / 60,
+                    lon + (ord(g[4]) - 65) * 5 / 60 + 2.5 / 60)
+        return (lat + 0.5, lon + 1)
+    except (IndexError, ValueError):
+        return None
+
+
+def _qth():
+    """Position et indicatif de la station : MY_GRID / MY_CALL de config.ini."""
+    try:
+        import station_master as _sm
+        # JO20SP : coordonnées exactes d'Ans, plus précises que le centre du locator
+        if (_sm.MY_GRID or "").strip().upper() == "JO20SP":
+            return QTH_LAT, QTH_LON, _sm.MY_CALL
+        pos = _locator_latlon(_sm.MY_GRID)
+        if pos:
+            return pos[0], pos[1], _sm.MY_CALL
+    except Exception:
+        pass
+    return QTH_LAT, QTH_LON, QTH_CALL
 
 # ── Carte monde ───────────────────────────────────────────────────────────────
 
@@ -270,18 +299,19 @@ class TabGrayline:
                          fill=color + "CC", outline="#ffffff44")
 
         # ── Grand cercle ──────────────────────────────────────────────────────
+        qth_lat, qth_lon, qth_call = _qth()
         if self._selected_spot:
             coords = cty.get(self._selected_spot.get("country", ""))
             if coords:
                 self._draw_great_circle(draw,
-                    QTH_LAT, QTH_LON, coords[0], coords[1], w, h)
+                    qth_lat, qth_lon, coords[0], coords[1], w, h)
 
-        # ── QTH ON5AM ─────────────────────────────────────────────────────────
-        qx, qy = self._ll2xy(QTH_LAT, QTH_LON, w, h)
+        # ── QTH de la station ─────────────────────────────────────────────────
+        qx, qy = self._ll2xy(qth_lat, qth_lon, w, h)
         draw.ellipse([qx-5, qy-5, qx+5, qy+5], fill=(255, 50, 50, 255))
         draw.ellipse([qx-9, qy-9, qx+9, qy+9],
                      outline=(255, 100, 100, 180), width=2)
-        draw.text((qx + 11, qy - 7), QTH_CALL, fill=(255, 255, 255, 230))
+        draw.text((qx + 11, qy - 7), qth_call, fill=(255, 255, 255, 230))
 
         # ── Grille (si carte de secours) ──────────────────────────────────────
         if not self._map_base:

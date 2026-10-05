@@ -54,13 +54,33 @@ _WMO: dict[int, tuple[str, str]] = {
     99: ("⛈️", "Orage + grêle forte"),
 }
 
-_API_URL = (
-    "https://api.open-meteo.com/v1/forecast"
-    f"?latitude={_LAT}&longitude={_LON}"
-    "&current=temperature_2m,weathercode,windspeed_10m"
-    "&hourly=temperature_2m,weathercode,precipitation_probability"
-    "&timezone=auto&forecast_days=1"
-)
+def _coords():
+    """(lat, lon) de la prévision : centre du locator MY_GRID (4 ou 6 caractères).
+    Secours, et valeur gardée pour JO20SP : coordonnées d'Ans (_LAT, _LON)."""
+    try:
+        import station_master as _sm
+        g = (_sm.MY_GRID or "").strip().upper()
+        if g == "JO20SP":
+            return _LAT, _LON
+        lon = (ord(g[0]) - 65) * 20 - 180 + int(g[2]) * 2
+        lat = (ord(g[1]) - 65) * 10 - 90 + int(g[3])
+        if len(g) >= 6 and "A" <= g[4] <= "X" and "A" <= g[5] <= "X":
+            return (round(lat + (ord(g[5]) - 65) * 2.5 / 60 + 1.25 / 60, 4),
+                    round(lon + (ord(g[4]) - 65) * 5 / 60 + 2.5 / 60, 4))
+        return (lat + 0.5, lon + 1)
+    except Exception:
+        return _LAT, _LON
+
+
+def _api_url():
+    lat, lon = _coords()
+    return (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,weathercode,windspeed_10m"
+        "&hourly=temperature_2m,weathercode,precipitation_probability"
+        "&timezone=auto&forecast_days=1"
+    )
 
 
 def _wmo(code: int) -> tuple[str, str]:
@@ -147,7 +167,7 @@ class WeatherWidget:
             self._set_all("🌡️ Météo indisponible", "", "", "")
             return
         try:
-            r = _req.get(_API_URL, timeout=10)
+            r = _req.get(_api_url(), timeout=10)
             r.raise_for_status()
             data = r.json()
 

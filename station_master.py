@@ -1292,6 +1292,9 @@ class QRZManager:
                 "aliases": t("aliases"),
                 "lotw": t("lotw"),
                 "eqsl": t("eqsl"),
+                # Position précise (onglet Rotor : cap exact, même pour les stations proches)
+                "lat": t("lat"),
+                "lon": t("lon"),
             }
         except Exception as e:
             print(f"QRZ fetch error: {e}")
@@ -1808,6 +1811,7 @@ class StationMasterApp:
         self._udp_adif_port = 2333
         self._load_udp_config()
         self._load_spe_config()
+        self._load_rotor_config()
 
         self.setup_ui()
         try:
@@ -1905,6 +1909,12 @@ class StationMasterApp:
         except Exception:
             pass
         try:
+            # Rotor : S (avec attente du OK) puis fermeture du port, avant destroy
+            if self._rotor_tab is not None:
+                self._rotor_tab.stop()
+        except Exception:
+            pass
+        try:
             self.root.destroy()
         except tk.TclError as e:
             # destroy() interrompu : on sort quand même de la boucle Tk
@@ -1919,6 +1929,24 @@ class StationMasterApp:
         if CONF and CONF.has_section("SPE"):
             self._spe_port = CONF.get("SPE", "port", fallback="").strip()
             self._spe_baud = int(CONF.get("SPE", "baudrate", fallback="115200"))
+
+    def _load_rotor_config(self):
+        """Lit port, baudrate, plage et QTH du rotor (GS-232) depuis config.ini."""
+        self._rotor_port = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+        self._rotor_baud = 9600
+        self._rotor_max_az = 360
+        self._rotor_qth = None   # vide → centre du locator MY_GRID
+        if CONF and CONF.has_section("ROTOR"):
+            self._rotor_port = CONF.get("ROTOR", "port", fallback=self._rotor_port).strip()
+            self._rotor_baud = int(CONF.get("ROTOR", "baudrate", fallback="9600"))
+            self._rotor_max_az = int(CONF.get("ROTOR", "max_az", fallback="360"))
+            try:
+                lat = CONF.get("ROTOR", "lat", fallback="").strip()
+                lon = CONF.get("ROTOR", "lon", fallback="").strip()
+                if lat and lon:
+                    self._rotor_qth = (float(lat), float(lon))
+            except ValueError:
+                print("[RotorTab] lat/lon invalides dans [ROTOR], locator utilisé")
 
     def _start_udp_threads(self):
         """Démarre les deux écoutes de Decodium.
@@ -2180,6 +2208,26 @@ class StationMasterApp:
             )
         except Exception as _e:
             print(f"[SPEExpertTab] Import échoué : {_e}")
+
+        # --- Onglet Rotor (pilotage manuel uniquement, port ouvert au clic) ---
+        self._rotor_tab = None
+        try:
+            from tab_rotor import RotorTab
+
+            t_rotor = tk.Frame(self.nb, bg=BG)
+            self.nb.add(t_rotor, text="🧭 Rotor")
+            self._rotor_tab = RotorTab(
+                t_rotor,
+                app=self,
+                port=self._rotor_port,
+                baudrate=self._rotor_baud,
+                max_az=self._rotor_max_az,
+                qth=self._rotor_qth,
+                grid=MY_GRID,
+                callsign=MY_CALL,
+            )
+        except Exception as _e:
+            print(f"[RotorTab] Import échoué : {_e}")
 
         # --- Onglet Propagation ---
         t_prop = tk.Frame(self.nb, bg=BG)

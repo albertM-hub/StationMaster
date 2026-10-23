@@ -7,6 +7,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('logo/station_masters.png', 'logo'),
+        ('rotor_world_map.png', '.'),
     ],
     hiddenimports=[
         'ttkbootstrap', 'ttkbootstrap.constants', 'ttkbootstrap.themes',

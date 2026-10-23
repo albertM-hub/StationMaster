@@ -1252,6 +1252,48 @@ def wiki_spe_expert():
     ]
 
 
+def wiki_rotor():
+    return [
+        ("h1", "  🧭 Rotor (Yaesu G-2800DXC + contrôleur K3NG ON5AM)"),
+        ("", ""),
+        ("h2", "  Vue d'ensemble"),
+        ("", "  L'onglet 🧭 Rotor pilote le rotor via le Nano K3NG (protocole GS-232A, 9600 bauds)."),
+        ("ok", "  ✅ Pilotage MANUEL uniquement : aucune rotation liée au Journal, au cluster ou aux spots"),
+        ("ok", "  ✅ Seuls GO, CCW et CW font bouger l'antenne — STOP est toujours actif"),
+        ("", ""),
+        ("h2", "  Connexion"),
+        ("", "  1. Cliquez 🔌 Connecter (panneau STATUT) — le port ne s'ouvre jamais tout seul"),
+        ("", "  2. « ⏳ Connexion… » environ 2 s (redémarrage de l'Arduino), puis « ● EN LIGNE »"),
+        ("", "  3. ⏏ Déconnecter envoie S avant de fermer le port"),
+        ("tip", "  💡 Réglages dans config.ini, section [ROTOR] : port, baudrate, max_az, lat, lon"),
+        ("warn", "  ⚠️ Un seul programme à la fois sur le port : fermez rotor_control.py avant de connecter"),
+        ("", ""),
+        ("h2", "  Commandes"),
+        ("", "  GO           → tapez l'azimut (0–360) puis cliquez GO. La touche Entrée ne lance rien."),
+        ("", "  ◄ CCW / CW ► → maintenir enfoncé ; l'antenne s'arrête au relâchement,"),
+        ("", "                 si la souris quitte le bouton ou si la fenêtre perd le focus"),
+        ("", "  ■ STOP       → arrêt immédiat, « STOP confirmé par le contrôleur » en vert"),
+        ("", "  Échap        → STOP depuis n'importe quel onglet"),
+        ("warn", "  ⚠️ « STOP NON CONFIRMÉ » en rouge : le contrôleur n'a pas répondu — vérifiez le rotor"),
+        ("", ""),
+        ("h2", "  Carte et recherche QRZ"),
+        ("", "  Clic sur la carte        → l'azimut du point cliqué remplit le champ (rien n'est envoyé)"),
+        ("", "  Indicatif + ⊙ (ou Entrée) → pays et cap depuis QRZ.com (rien n'est envoyé)"),
+        ("", "  Ligne verte pointillée = cap lu sur le rotor · ligne rouge = cible"),
+        ("tip", "  💡 Après un clic ou une recherche, cliquez GO pour tourner"),
+        ("", ""),
+        ("h2", "  Fermeture de Station Master"),
+        ("ok", "  ✅ S est envoyé et confirmé par le contrôleur avant la fermeture du port :"),
+        ("ok", "     une rotation en cours s'arrête quand on ferme l'appli"),
+        ("", ""),
+        ("h2", "  Limites connues"),
+        ("warn", "  ⚠️ La présélection de la face avant du G-2800DXC est indépendante :"),
+        ("warn", "     Station Master ne peut pas l'empêcher de faire tourner le rotor"),
+        ("tip", "  💡 Lecture décalée de 2 à 4° tant qu'un relais est collé (normal, voir résultats de tests)"),
+        ("tip", "  💡 Étalonnage lié au 5 V USB : même port, même câble, pas de hub"),
+    ]
+
+
 def wiki_troubleshoot():
     return [
         ("h1", "  🔧 Dépannage"),

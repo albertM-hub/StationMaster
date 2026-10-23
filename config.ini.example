@@ -50,3 +50,10 @@ adifport = 2333
 [SPE]
 port = /dev/spe_expert
 baudrate = 115200
+
+[ROTOR]
+port = /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+baudrate = 9600
+max_az = 360
+lat =
+lon =

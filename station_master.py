@@ -6238,6 +6238,7 @@ class StationMasterApp:
             wiki_troubleshoot,
             wiki_ft8_decodium,
             wiki_spe_expert,
+            wiki_rotor,
             wiki_logbook_analysis,
         )
 
@@ -6263,6 +6264,7 @@ class StationMasterApp:
             "⚙️ Configuration": wiki_config(),
             "📡 FT8 & Decodium": wiki_ft8_decodium(),
             "⚡ Ampli SPE Expert": wiki_spe_expert(),
+            "🧭 Rotor": wiki_rotor(),
             "🔧 Dépannage": wiki_troubleshoot(),
         }
         for title, content in sections.items():

@@ -58,3 +58,9 @@ $RECYCLE.BIN/
 venv/
 env/
 .env/
+
+# Tests SWR Flex et soumissions LoTW (fichiers locaux)
+flex_meters_dump.txt
+swr_log.csv
+lotw_submit_*.tq8
+*.bak*

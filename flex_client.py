@@ -2,17 +2,24 @@
 """
 flex_client.py - Client TCP pour Flex-6500 via FlexAPI
 Auteur : ON5AM — hamanalyst.org
-Solution mètres : deux connexions TCP simultanées
-  - Connexion 1 (principale) : état radio, slices, interlock
-  - Connexion 2 (mètres)     : sub meter all → reçoit M| en temps réel
+Compteurs (mètres) :
+  - TCP 4992 : état radio, slices, interlock + DESCRIPTIONS des compteurs
+    (S|meter … nom, source, unité, bornes) via « sub meter all »
+  - UDP      : VALEURS des compteurs en paquets VITA-49 (classe 0x8002),
+    envoyées par la radio au port déclaré avec « client udpport ».
+    Conversion comme FlexLib : dBm/dBFS/dB/SWR ÷128, Volts/Amps ÷256,
+    degC/degF ÷64 (vérifié sur la radio le 2026-11-24 : SWR 128 → 1.00,
+    135 → 1.05 ; +13.8A 3424 → 13.38 V ; PATEMP 2032 → 31.75 °C).
 """
 
-import socket, threading, time
+import socket, struct, threading, time
 from dataclasses import dataclass
 from typing import Optional, Callable
 
 FLEX_IP   = "192.168.1.5"
 FLEX_PORT = 4992
+FLEX_UDP_PORT = 4991          # port UDP de la radio (enregistrement firmware v3+)
+VITA_METER_CLASS = 0x8002     # code de classe VITA-49 des paquets compteurs
 
 @dataclass
 class RadioState:
@@ -58,15 +65,21 @@ class FlexClient:
         self._running  = False
         self._lock     = threading.Lock()
         self._meter_map: dict = {}          # meter_id → name
-        self._meter_scale: dict = {}        # meter_id → (low, high) pour scaling M|
+        self._meter_scale: dict = {}        # meter_id → (low, high) (info seulement)
+        self._meter_units: dict = {}        # meter_id → unité (dBm, SWR, Volts…)
         # Mapping seq → meter_id pour corréler R| avec meter get
         self._pending_meter_gets: dict = {}
         self._pending_meter_list: set = set()  # seq en attente de meter list
         self.on_update: Optional[Callable] = None
         # Connexion principale
         self._sock: Optional[socket.socket] = None
-        # Connexion secondaire dédiée aux mètres
-        self._meter_sock: Optional[socket.socket] = None
+        # Réception UDP des valeurs de compteurs (VITA-49)
+        self._udp: Optional[socket.socket] = None
+        self._handle = ""                   # handle client (ligne H à la connexion)
+        self._udpport_seq = -1              # seq de « client udpport »
+        self._udpport_code = None           # code réponse (« 0 » = accepté)
+        self._udp_fwd_time = 0.0            # dernier FWDPWR reçu en UDP
+        self._last_notify = 0.0             # limite de rafraîchissement UI
 
     # ── Connexion ────────────────────────────────────────────────
     def connect(self) -> bool:
@@ -83,15 +96,14 @@ class FlexClient:
             threading.Thread(target=self._read_loop,
                              args=(self._sock, "MAIN"), daemon=True).start()
             time.sleep(0.4)
+            # Port UDP AVANT la souscription : les valeurs arrivent dès « sub meter all »
+            self._open_udp()
             self._send(self._sock, "sub slice all")
-            self._send(self._sock, "sub meter all")
-            # Demander la liste des mètres pour peupler _meter_map et _meter_scale
+            self._send(self._sock, "sub tx all")      # état interlock (lecture seule)
+            self._send(self._sock, "sub meter all")   # une seule souscription
+            # Demander la liste des mètres pour peupler _meter_map / _meter_units
             seq = self._send(self._sock, "meter list")
             self._pending_meter_list.add(seq)
-
-            # Connexion secondaire pour les mètres
-            time.sleep(0.3)
-            self._connect_meter_client()
 
             # Threads de polling
             threading.Thread(target=self._static_meter_loop, daemon=True).start()
@@ -102,29 +114,98 @@ class FlexClient:
             self.state.connected = False
             return False
 
-    def _connect_meter_client(self):
-        """Ouvre une 2e connexion TCP dédiée à la réception des mètres."""
+    def _open_udp(self):
+        """Ouvre un port UDP local et le déclare à la radio pour recevoir les compteurs.
+        « client udpport » (accepté par le protocole 1.4 de la Flex-6500) ; si refusé
+        (firmware v3+), enregistrement par paquet « client udp_register » vers 4991."""
         try:
-            self._meter_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._meter_sock.settimeout(5)
-            self._meter_sock.connect((self.ip, self.port))
-            self._meter_sock.settimeout(None)
-            print("[OK] Connexion mètres établie")
-            threading.Thread(target=self._read_loop,
-                             args=(self._meter_sock, "METER"), daemon=True).start()
-            time.sleep(0.3)
-            self._send(self._meter_sock, "sub meter all")
-            # NE PAS demander meter get ici — le _meter_map n'est pas encore
-            # construit. Le _static_meter_loop s'en chargera après 3s.
+            self._udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._udp.bind(("", 0))                 # port libre choisi par le système
+            self._udp.settimeout(1.0)
+            port = self._udp.getsockname()[1]
+            threading.Thread(target=self._udp_loop, daemon=True).start()
+            self._udpport_seq = self._send(self._sock, f"client udpport {port}")
+            t0 = time.time()
+            while self._udpport_code is None and time.time() - t0 < 2.0:
+                time.sleep(0.05)
+            print(f"[UDP] Port local {port} — client udpport → {self._udpport_code}")
+            if self._udpport_code != "0" and self._handle:
+                msg = f"client udp_register handle=0x{self._handle}".encode()
+                for _ in range(3):
+                    self._udp.sendto(msg, (self.ip, FLEX_UDP_PORT))
+                    time.sleep(0.1)
+                print("[UDP] udp_register envoyé (firmware v3)")
         except Exception as e:
-            print(f"[WARN] Connexion mètres impossible : {e}")
+            print(f"[WARN] UDP compteurs indisponible : {e}")
+
+    def _udp_loop(self):
+        """Reçoit les paquets VITA-49 et applique les valeurs des compteurs."""
+        while self._running and self._udp:
+            try:
+                data, _ = self._udp.recvfrom(65535)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            changed = False
+            for mid, raw in self._parse_vita_meters(data):
+                val = self._convert_meter(mid, raw)
+                if val is not None:
+                    changed |= self._apply_meter(mid, val, notify=False)
+            # Une seule mise à jour UI par paquet, au plus 10 par seconde
+            now = time.time()
+            if changed and self.on_update and now - self._last_notify >= 0.1:
+                self._last_notify = now
+                self.on_update(self.state)
+
+    @staticmethod
+    def _parse_vita_meters(data: bytes):
+        """Renvoie [(id str, valeur brute int16)] d'un paquet VITA-49 compteurs, sinon []."""
+        if len(data) < 8:
+            return []
+        w0 = struct.unpack_from(">I", data, 0)[0]
+        off = 8                                   # en-tête + stream id
+        if not (w0 >> 27) & 1:                    # pas de class id → pas un compteur
+            return []
+        if len(data) < off + 8:
+            return []
+        classe = struct.unpack_from(">I", data, off + 4)[0] & 0xFFFF
+        off += 8
+        if classe != VITA_METER_CLASS:
+            return []
+        if (w0 >> 22) & 3:                        # horodatage entier
+            off += 4
+        if (w0 >> 20) & 3:                        # horodatage fractionnaire
+            off += 8
+        taille = (w0 & 0xFFFF) * 4
+        fin = min(len(data), taille) if taille else len(data)
+        out = []
+        while off + 4 <= fin:                     # paires (uint16 id, int16 valeur)
+            mid, raw = struct.unpack_from(">Hh", data, off)
+            out.append((str(mid), raw))
+            off += 4
+        return out
+
+    def _convert_meter(self, meter_id: str, raw: int):
+        """Valeur brute → unité réelle (règles FlexLib). None si l'unité est encore
+        inconnue (description pas reçue) : on n'affiche pas une valeur fausse."""
+        unit = self._meter_units.get(meter_id, "").lower()
+        if not unit:
+            return None
+        if unit in ("dbm", "dbfs", "db", "swr"):
+            return raw / 128.0
+        if unit in ("volts", "amps"):
+            return raw / 256.0
+        if unit in ("degc", "degf"):
+            return raw / 64.0
+        return float(raw)                         # Watts, Percent, RPM : direct
 
     def _static_meter_loop(self):
         """Attend le meter list pour peupler _meter_map — pas de polling (bloqué firmware)."""
         time.sleep(3.0)
         if not self._meter_map:
             print("[StaticMeters] meter_map vide → nouvel essai 'meter list'")
-            sock = self._meter_sock or self._sock
+            sock = self._sock
             if sock:
                 seq = self._send(sock, "meter list")
                 self._pending_meter_list.add(seq)
@@ -170,7 +251,8 @@ class FlexClient:
                 while self._running:
                     # Puissance TX mesurée : 0.0-1.0 → watts (Flex-6500 ≈ 100W max)
                     p = self._rigctld_get(sock, "l RFPOWER_METER")
-                    if p:
+                    # FWDPWR reçu en UDP (mesure de la radio) prioritaire sur rigctld
+                    if p and time.time() - self._udp_fwd_time >= 2.0:
                         try:
                             ratio = float(p)
                             tx = self.state.tx_active
@@ -227,8 +309,10 @@ class FlexClient:
                         m = _re.match(r"PC(\d{3})", resp)
                         if m:
                             pct = int(m.group(1))
-                            self.state.power_fwd = round(float(pct), 1) if tx else 0.0
-                            changed = True; continue
+                            if time.time() - self._udp_fwd_time >= 2.0:  # UDP prioritaire
+                                self.state.power_fwd = round(float(pct), 1) if tx else 0.0
+                                changed = True
+                            continue
                         m = _re.match(r"SM0?(\d+)", resp)
                         if m:
                             raw = int(m.group(1))
@@ -245,7 +329,7 @@ class FlexClient:
 
     def disconnect(self):
         self._running = False
-        for s in (self._sock, self._meter_sock):
+        for s in (self._sock, self._udp):
             if s:
                 try: s.close()
                 except: pass
@@ -343,11 +427,20 @@ class FlexClient:
         if not line: return
         p = line[0]
 
-        if p in ("V", "H"): return
+        if p == "H":
+            self._handle = line[1:].strip()
+            return
+        if p == "V": return
 
         # R<seq>|code|value — réponse à une commande
         if p == "R":
             parts = line.split("|", 3)
+            try:
+                if int(line[1:].split("|")[0]) == self._udpport_seq and len(parts) >= 2:
+                    self._udpport_code = parts[1]
+                    return
+            except ValueError:
+                pass
             if len(parts) >= 3:
                 try:
                     seq_chk = int(line[1:].split("|")[0])
@@ -407,11 +500,9 @@ class FlexClient:
                 raw = int(val_str, 16)
                 if raw > 32767:
                     raw -= 65536
-                if meter_id in self._meter_scale:
-                    lo, hi = self._meter_scale[meter_id]
-                    val = lo + (raw + 32768) * (hi - lo) / 65535.0
-                else:
-                    val = raw / 1000.0
+                val = self._convert_meter(meter_id, raw)
+                if val is None:
+                    return
             except ValueError:
                 # La réponse est parfois un flottant décimal direct
                 val = float(val_str)
@@ -449,13 +540,12 @@ class FlexClient:
                 # Reset puissance à 0 quand TX termine
                 if kv["state"] in ("READY", "UNKEY_REQUESTED") and prev == "TRANSMITTING":
                     self.state.power_fwd = 0.0
-                    self.state.swr = 1.0
+                    # SWR non remis à 1.0 : l'affichage gère le repos (« -- »)
                 if kv["state"] != prev: changed = True
 
         elif payload.startswith("meter "):
             rest = payload[6:]
             if "removed" in rest: return
-            print(f"  [S|meter DBG] {rest[:160]!r}")
             dot = rest.find(".")
             if dot == -1: return
             mid = rest[:dot]
@@ -465,6 +555,8 @@ class FlexClient:
                 if ".nam=" in chunk:
                     name = chunk.split(".nam=", 1)[1].split()[0].strip()
                     self._meter_map[mid] = name
+                if ".unit=" in chunk:
+                    self._meter_units[mid] = chunk.split(".unit=", 1)[1].split()[0].strip()
                 if ".low=" in chunk:
                     try:
                         low_val = float(chunk.split(".low=", 1)[1].split()[0].strip())
@@ -485,10 +577,12 @@ class FlexClient:
     def _parse_meter_list_response(self, payload: str):
         """Parse réponse à 'meter list' : '1.nam=LEVEL 1.low=-150 1.hi=0 2.nam=FWDPWR ...'"""
         import re
-        for m in re.finditer(r'(\d+)\.(nam|low|hi)=(-?[\d.]+|\w+)', payload):
+        for m in re.finditer(r'(\d+)\.(nam|low|hi|unit)=([^#\s]+)', payload):
             mid, key, val = m.group(1), m.group(2), m.group(3)
             if key == "nam":
                 self._meter_map[mid] = val
+            elif key == "unit":
+                self._meter_units[mid] = val
             elif key == "low":
                 try:
                     lo = float(val)
@@ -502,7 +596,7 @@ class FlexClient:
                     self._meter_scale[mid] = (cur[0], hi)
                 except Exception: pass
         print(f"[MeterList] {len(self._meter_map)} mètres: {self._meter_map}")
-        print(f"[MeterList] scales: {self._meter_scale}")
+        print(f"[MeterList] unités: {self._meter_units}")
 
     def _parse_meters(self, payload: str):
         """Format M| : supporte 'id hex id hex ...' ET 'id=hex id=hex ...'"""
@@ -521,12 +615,9 @@ class FlexClient:
             try:
                 raw = int(hexval, 16)
                 if raw > 32767: raw -= 65536
-                if mid in self._meter_scale:
-                    lo, hi = self._meter_scale[mid]
-                    val = lo + (raw + 32768) * (hi - lo) / 65535.0
-                else:
-                    val = raw / 1000.0
-                self._apply_meter(mid, val)
+                val = self._convert_meter(mid, raw)
+                if val is not None:
+                    self._apply_meter(mid, val)
             except ValueError:
                 pass
 
@@ -550,7 +641,9 @@ class FlexClient:
                 if mid.isdigit():
                     _apply(mid, hexval)
 
-    def _apply_meter(self, meter_id: str, value: float):
+    def _apply_meter(self, meter_id: str, value: float, notify: bool = True) -> bool:
+        """Range une valeur convertie dans state. notify=False : l'appelant (boucle
+        UDP) regroupe les mises à jour UI. Renvoie True si state a changé."""
         name    = self._meter_map.get(meter_id, "")
         changed = False
 
@@ -558,7 +651,8 @@ class FlexClient:
             self.state.smeter = value; changed = True
         elif name == "FWDPWR":
             watts = round(10**((value-30)/10), 1) if value > -100 else 0.0
-            self.state.power_fwd = watts; changed = True
+            self.state.power_fwd = watts if self.state.tx_active else 0.0
+            self._udp_fwd_time = time.time(); changed = True
         elif name == "SWR":
             self.state.swr = max(1.0, value); changed = True
         elif name == "ALC":
@@ -570,8 +664,9 @@ class FlexClient:
         elif name == "PATEMP":
             self.state.pa_temp = value; changed = True
 
-        if changed and self.on_update:
+        if changed and notify and self.on_update:
             self.on_update(self.state)
+        return changed
 
     @staticmethod
     def _kv(text: str) -> dict:

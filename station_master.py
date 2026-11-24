@@ -2024,6 +2024,48 @@ class StationMasterApp:
         self.utc_time_var.set(datetime.now(timezone.utc).strftime("%H:%M:%S UTC"))
         self.root.after(1000, self.update_clock)
 
+    @staticmethod
+    def _swr_couleur(v):
+        """Code couleur SWR commun (onglet Flex-6500 et en-tête) :
+        vert < 1.5, orange 1.5–2.0, rouge > 2.0."""
+        return "#3fb950" if v < 1.5 else "#d29922" if v <= 2.0 else "#f85149"
+
+    def _update_header_swr(self, state=None):
+        """Indicateur SWR de l'en-tête. Affichage seulement.
+        Radio OFF → vide ; connectée au repos → « SWR -- » gris ;
+        en émission → valeur colorée + max de l'émission en cours."""
+        if not hasattr(self, "_hdr_swr_lbl"):
+            return
+        if state is None:
+            fc = getattr(self, "_flex_client", None)
+            state = fc.state if fc else None
+        if state is None or not state.connected:
+            self._hdr_swr_lbl.config(text="")
+            self._hdr_swr_max_lbl.config(text="")
+            return
+        if not state.tx_active:
+            self._hdr_swr_lbl.config(text="SWR --", foreground="#8b949e")
+            self._hdr_swr_max_lbl.config(text="")
+            return
+        swr = state.swr
+        self._hdr_swr_lbl.config(
+            text=f"SWR {swr:.2f}:1", foreground=self._swr_couleur(swr)
+        )
+        # Max calculé par _flex_on_update ; pas encore remis à zéro si
+        # l'émission vient de commencer → « max -- »
+        m = getattr(self, "_flex_swr_max", None)
+        if m is None or not getattr(self, "_flex_swr_tx_prev", False):
+            self._hdr_swr_max_lbl.config(text="max --", foreground="#8b949e")
+        else:
+            self._hdr_swr_max_lbl.config(
+                text=f"max {m:.2f}:1", foreground=self._swr_couleur(m)
+            )
+
+    def _header_swr_loop(self):
+        # Filet de sécurité : la radio peut se déconnecter sans mise à jour
+        self._update_header_swr()
+        self.root.after(1000, self._header_swr_loop)
+
     # ==========================================
     # --- SETUP UI ---
     # ==========================================
@@ -2070,6 +2112,34 @@ class StationMasterApp:
             font=("Arial", 10),
             foreground="#f39c12",
         ).pack(side="left")
+
+        # ── Indicateur SWR (en-tête, commun à tous les onglets) ──────────────
+        # Lit le même état que la jauge de l'onglet Flex-6500 (state du
+        # FlexClient + self._flex_swr_max) : aucune connexion, aucun ordre
+        # radio. Largeur fixe en caractères (police monospace) : l'en-tête ne
+        # bouge pas quand le texte change ou disparaît (radio OFF).
+        f_swr = ttk.Frame(top, bootstyle="dark", padding=(10, 0))
+        f_swr.pack(side="left")
+        self._hdr_swr_lbl = ttk.Label(
+            f_swr,
+            text="",
+            width=12,  # « SWR 99.99:1 »
+            anchor="w",
+            font=("Consolas", 14, "bold"),
+            foreground="#8b949e",
+        )
+        # fill="x" : les deux fonds prennent la largeur du bloc, comme l'horloge
+        self._hdr_swr_lbl.pack(side="top", fill="x")
+        self._hdr_swr_max_lbl = ttk.Label(
+            f_swr,
+            text="",
+            width=12,
+            anchor="w",
+            font=("Consolas", 9),
+            foreground="#8b949e",
+        )
+        self._hdr_swr_max_lbl.pack(side="top", fill="x")
+        self.root.after(1000, self._header_swr_loop)
 
         self.lbl_data = ttk.Label(
             top, text="RX DATA", font=("Consolas", 8), foreground="#3daee9"
@@ -8735,19 +8805,33 @@ class StationMasterApp:
         self._flex_swr_canvas.create_rectangle(
             0, 0, 4000, 16, fill="#0d2e14", outline=""
         )
+        # Barre vide et « -- » gris au repos : le SWR n'a de sens qu'en émission
         self._flex_swr_bar = self._flex_swr_canvas.create_rectangle(
-            0, 0, 5, 16, fill="#3fb950", outline=""
-        )  # petit tick à 0 toujours visible
+            0, 0, 0, 16, fill="#3fb950", outline=""
+        )
         self._flex_swr_val = tk.Label(
             swr_row,
-            text="1.00:1",
+            text="--",
             width=8,
             font=("Consolas", 10, "bold"),
-            fg="#3fb950",
+            fg="#8b949e",
             bg=BG,
             anchor="w",
         )
         self._flex_swr_val.pack(side="left")
+        # SWR max de l'émission en cours (conservé jusqu'à l'émission suivante)
+        self._flex_swr_max_lbl = tk.Label(
+            swr_row,
+            text="max --",
+            width=10,
+            font=("Consolas", 9),
+            fg="#8b949e",
+            bg=BG,
+            anchor="w",
+        )
+        self._flex_swr_max_lbl.pack(side="left")
+        self._flex_swr_max = None  # None = pas encore de mesure valable
+        self._flex_swr_tx_prev = False  # état TX à la mise à jour précédente
         # ALC
         tk.Label(
             swr_row,
@@ -8773,12 +8857,14 @@ class StationMasterApp:
         self._flex_alc_bar = self._flex_alc_canvas.create_rectangle(
             0, 0, 0, 16, fill="#bc8cff", outline=""
         )
+        # width=10 : « -150.0 dB » (9 caractères) entièrement visible ;
+        # « -- » gris au repos, comme le SWR
         self._flex_alc_val = tk.Label(
             swr_row,
-            text="0.0 dB",
-            width=8,
+            text="--",
+            width=10,
             font=("Consolas", 10, "bold"),
-            fg="#bc8cff",
+            fg="#8b949e",
             bg=BG,
             anchor="w",
         )
@@ -9127,34 +9213,67 @@ class StationMasterApp:
         self._flex_pwr_val.config(text=f"{state.power_fwd:.0f} W", fg=pwr_fg)
 
         # ── SWR ───────────────────────────────────────────────────────────────
-        swr_pct = max(0.0, min(1.0, (state.swr - 1.0) / 2.0))
-        try:
-            w = max(50, self._flex_swr_canvas.winfo_reqwidth())
-            px = int(w * swr_pct)
-            swr_col = (
-                "#3fb950"
-                if state.swr < 1.5
-                else "#d29922" if state.swr < 2.0 else "#f85149"
+        # Affichage seulement : aucune action sur la radio, quelle que soit la
+        # valeur. Compteur SWR du Flex (UDP VITA-49, brut ÷ 128, voir flex_client).
+        _swr_couleur = self._swr_couleur  # code couleur commun avec l'en-tête
+
+        if state.tx_active and not self._flex_swr_tx_prev:
+            self._flex_swr_max = None  # nouvelle émission : max remis à zéro
+        self._flex_swr_tx_prev = state.tx_active
+
+        if state.tx_active:
+            swr = state.swr
+            # Max relevé seulement avec ≥ 0,5 W directs : pendant la montée ou la
+            # descente de la porteuse le rapport n'est pas significatif.
+            if state.power_fwd >= 0.5:
+                self._flex_swr_max = (
+                    swr if self._flex_swr_max is None else max(self._flex_swr_max, swr)
+                )
+            swr_pct = max(0.0, min(1.0, (swr - 1.0) / 2.0))
+            try:
+                w = max(50, self._flex_swr_canvas.winfo_reqwidth())
+                # Minimum 5 px : la barre reste visible à 1.00:1 en émission
+                px = max(5, int(w * swr_pct))
+                self._flex_swr_canvas.coords(self._flex_swr_bar, 0, 0, px, 16)
+                self._flex_swr_canvas.itemconfig(
+                    self._flex_swr_bar, fill=_swr_couleur(swr)
+                )
+            except Exception:
+                pass
+            self._flex_swr_val.config(text=f"{swr:.2f}:1", fg=_swr_couleur(swr))
+        else:
+            # Repos : barre vide, « -- » gris ; le max de la dernière émission reste
+            try:
+                self._flex_swr_canvas.coords(self._flex_swr_bar, 0, 0, 0, 16)
+            except Exception:
+                pass
+            self._flex_swr_val.config(text="--", fg="#8b949e")
+
+        if self._flex_swr_max is None:
+            self._flex_swr_max_lbl.config(text="max --", fg="#8b949e")
+        else:
+            self._flex_swr_max_lbl.config(
+                text=f"max {self._flex_swr_max:.2f}",
+                fg=_swr_couleur(self._flex_swr_max),
             )
-            self._flex_swr_canvas.coords(self._flex_swr_bar, 0, 0, px, 16)
-            self._flex_swr_canvas.itemconfig(self._flex_swr_bar, fill=swr_col)
-        except:
-            pass
-        swr_col2 = (
-            "#3fb950"
-            if state.swr < 1.5
-            else "#d29922" if state.swr < 2.0 else "#f85149"
-        )
-        self._flex_swr_val.config(text=f"{state.swr:.2f}:1", fg=swr_col2)
+        self._update_header_swr(state)  # en-tête : mêmes données, même max
 
         # ── ALC ───────────────────────────────────────────────────────────────
-        alc_pct = max(0.0, min(1.0, (state.alc + 20) / 20.0))
-        try:
-            w = max(50, self._flex_alc_canvas.winfo_reqwidth())
-            self._flex_alc_canvas.coords(self._flex_alc_bar, 0, 0, int(w * alc_pct), 16)
-        except:
-            pass
-        self._flex_alc_val.config(text=f"{state.alc:.1f} dB")
+        # Valeur seulement en émission ; au repos barre vide et « -- » gris
+        if state.tx_active:
+            alc_pct = max(0.0, min(1.0, (state.alc + 20) / 20.0))
+            try:
+                w = max(50, self._flex_alc_canvas.winfo_reqwidth())
+                self._flex_alc_canvas.coords(self._flex_alc_bar, 0, 0, int(w * alc_pct), 16)
+            except:
+                pass
+            self._flex_alc_val.config(text=f"{state.alc:.1f} dB", fg="#bc8cff")
+        else:
+            try:
+                self._flex_alc_canvas.coords(self._flex_alc_bar, 0, 0, 0, 16)
+            except:
+                pass
+            self._flex_alc_val.config(text="--", fg="#8b949e")
 
         # ── Infos Radio — toujours mettre à jour ──────────────────────────────
         if hasattr(self, "_flex_info_vars"):
